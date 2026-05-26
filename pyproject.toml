@@ -1,0 +1,155 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mvmm"
+version = "0.1.0"
+description = "Machine Vision MultiModal — SOTA defect detection, 6D pose, metrology and predictive maintenance for manufacturing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "CVKim" }
+]
+keywords = [
+    "machine-vision",
+    "multimodal",
+    "anomaly-detection",
+    "6d-pose",
+    "bin-picking",
+    "predictive-maintenance",
+    "manufacturing",
+    "semiconductor",
+    "automotive"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+# Core deps — keep light; heavy deps live in optional extras
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pillow>=10.2",
+    "opencv-python>=4.9",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "scikit-learn>=1.4",
+    "scikit-image>=0.22",
+    "matplotlib>=3.8",
+    "einops>=0.7",
+    "typer>=0.12",
+    "rich>=13.7",
+    "hydra-core>=1.3",
+    "omegaconf>=2.3",
+]
+
+[project.optional-dependencies]
+# PyTorch is intentionally NOT pinned here — install via conda/pip per CUDA
+torch = [
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "torchaudio>=2.2",
+]
+anomaly = [
+    "timm>=0.9",
+    "faiss-cpu>=1.7.4",  # use faiss-gpu via conda if available
+    "open-clip-torch>=2.24",
+    "anomalib>=1.0",
+]
+pose = [
+    "trimesh>=4.0",
+    "open3d>=0.18",
+    "pyrender>=0.1.45",
+]
+pdm = [
+    "pandas>=2.2",
+    "pyarrow>=15.0",
+    "torchmetrics>=1.3",
+]
+viz = [
+    "plotly>=5.19",
+    "streamlit>=1.31",
+    "gradio>=4.20",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "pytest-mock>=3.12",
+    "ruff>=0.4",
+    "mypy>=1.9",
+    "pre-commit>=3.6",
+    "ipykernel>=6.29",
+    "jupyterlab>=4.1",
+]
+all = [
+    "mvmm[torch,anomaly,pose,pdm,viz,dev]",
+]
+
+[project.scripts]
+mvmm = "mvmm.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/CVKim/MachineVisionMultimodal"
+Repository = "https://github.com/CVKim/MachineVisionMultimodal"
+Issues = "https://github.com/CVKim/MachineVisionMultimodal/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # function calls in default args (typer/hydra patterns)
+    "RUF012", # mutable class attrs without ClassVar
+    "RUF001", # ambiguous unicode in strings (— σ ×, used in docs)
+    "RUF002", # ambiguous unicode in docstrings
+    "RUF003", # ambiguous unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B018", "F401"]
+"scripts/*" = ["E402"]
+"notebooks/*" = ["E402", "F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "slow: tests that take >5s",
+    "gpu: tests that require a CUDA GPU",
+    "network: tests that require network access",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]

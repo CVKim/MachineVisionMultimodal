@@ -1,0 +1,4 @@
+name: visa
+root: ${paths.data}/visa
+category: candle
+num_workers: 4

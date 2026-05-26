@@ -1,0 +1,4 @@
+device: cpu
+mixed_precision: none
+num_workers: 0
+pin_memory: false

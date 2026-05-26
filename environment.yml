@@ -1,0 +1,55 @@
+name: mvmm
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip>=24.0
+  # ---- CUDA / PyTorch (RTX 30xx-compatible: CUDA 12.1) ----
+  - pytorch>=2.2
+  - torchvision>=0.17
+  - torchaudio>=2.2
+  - pytorch-cuda=12.1
+  # ---- scientific stack ----
+  - numpy>=1.26
+  - scipy>=1.11
+  - pandas>=2.2
+  - scikit-learn>=1.4
+  - scikit-image>=0.22
+  - matplotlib>=3.8
+  - pillow>=10.2
+  # ---- vision-specific ----
+  - opencv>=4.9
+  - ffmpeg
+  # ---- 3D / pose ----
+  - open3d-admin::open3d>=0.18
+  # ---- accelerated retrieval ----
+  - conda-forge::faiss-gpu>=1.7.4
+  # ---- io / config ----
+  - pyyaml>=6.0
+  - tqdm>=4.66
+  - rich>=13.7
+  - typer>=0.12
+  - hydra-core>=1.3
+  - omegaconf>=2.3
+  # ---- dev tooling ----
+  - jupyterlab>=4.1
+  - ipykernel>=6.29
+  - pre-commit>=3.6
+  - pytest>=8.0
+  - ruff>=0.4
+  - mypy>=1.9
+  # ---- pip-only ----
+  - pip:
+      - timm>=0.9
+      - einops>=0.7
+      - open-clip-torch>=2.24
+      - anomalib>=1.0
+      - trimesh>=4.0
+      - pyrender>=0.1.45
+      - torchmetrics>=1.3
+      - plotly>=5.19
+      - gradio>=4.20
+      - -e .

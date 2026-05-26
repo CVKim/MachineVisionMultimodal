@@ -1,0 +1,16 @@
+# Top-level Hydra config — `python -m mvmm.cli` does not use Hydra,
+# but project scripts can opt in (see scripts/train_anomaly.py).
+
+defaults:
+  - _self_
+  - anomaly: patchcore
+  - data: mvtec_ad
+  - hardware: cuda
+
+paths:
+  root: ${oc.env:PROJECT_ROOT,${hydra:runtime.cwd}}
+  data: ${paths.root}/data
+  outputs: ${paths.root}/outputs
+  checkpoints: ${paths.root}/checkpoints
+
+seed: 42

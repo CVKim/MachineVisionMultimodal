@@ -1,0 +1,4 @@
+name: mvtec_ad
+root: ${paths.data}/mvtec_ad
+category: bottle  # one of: bottle, cable, capsule, carpet, grid, hazelnut, leather, metal_nut, pill, screw, tile, toothbrush, transistor, wood, zipper
+num_workers: 4

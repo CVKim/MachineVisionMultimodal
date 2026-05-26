@@ -1,0 +1,4 @@
+device: cuda
+mixed_precision: bf16
+num_workers: 4
+pin_memory: true

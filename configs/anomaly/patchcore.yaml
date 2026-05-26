@@ -1,0 +1,8 @@
+name: patchcore
+layers: [layer2, layer3]
+target_size: 28
+coreset_ratio: 0.1
+use_faiss: true
+image_size: 256
+crop_size: 224
+batch_size: 16

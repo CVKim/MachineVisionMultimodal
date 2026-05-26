@@ -1,0 +1,5 @@
+name: anomaly_clip
+clip_model: ViT-B-16
+pretrained: openai
+windows: [2, 3, 4]
+object_name: "industrial part"

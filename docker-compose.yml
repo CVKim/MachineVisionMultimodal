@@ -1,0 +1,46 @@
+services:
+  mvmm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mvmm:latest
+    container_name: mvmm
+    # NVIDIA runtime — requires nvidia-container-toolkit on the host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: "16gb"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - .:/workspace
+      - mvmm-data:/workspace/data
+      - mvmm-cache:/root/.cache
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    # Default to bash; override with `docker compose run --rm mvmm <cmd>`
+    command: bash
+
+  jupyter:
+    extends:
+      service: mvmm
+    container_name: mvmm-jupyter
+    ports:
+      - "8888:8888"
+    command: >
+      bash -lc "jupyter lab --ip=0.0.0.0 --port=8888
+      --no-browser --allow-root --NotebookApp.token=''"
+
+volumes:
+  mvmm-data:
+  mvmm-cache:

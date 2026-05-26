@@ -1,0 +1,92 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual envs
+.venv/
+venv/
+env/
+.python-version
+
+# Conda
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# Logs
+*.log
+logs/
+runs/
+lightning_logs/
+wandb/
+mlruns/
+outputs/
+checkpoints/
+*.ckpt
+
+# Data — never commit large data, only manifests
+data/raw/
+data/processed/
+data/external/
+data/interim/
+!data/**/.gitkeep
+!data/sample/
+
+# Model weights
+*.pth
+*.pt
+*.onnx
+*.engine
+*.safetensors
+!**/test_*.pth
+
+# Secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# OS-specific
+*.bak
+*.orig
