@@ -199,7 +199,9 @@ class TrackingPipeline:
             output_json.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 "stats": stats.as_dict(),
-                "lines": [{"name": lc.name, "in": lc.in_count, "out": lc.out_count} for lc in self.line_counters],
+                "lines": [
+                    {"name": lc.name, "in": lc.in_count, "out": lc.out_count} for lc in self.line_counters
+                ],
                 "dwell_seconds": [{"name": d.zone.name, "values": d.seconds(fps)} for d in self.dwell_timers],
                 "per_frame": records,
             }

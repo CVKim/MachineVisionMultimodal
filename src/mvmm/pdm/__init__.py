@@ -16,6 +16,15 @@ Why multimodal for PdM:
 from __future__ import annotations
 
 from mvmm.pdm.fusion import MultimodalPdMModel
-from mvmm.pdm.timeseries import TimesNetBlock
+from mvmm.pdm.fusion_attn import CrossAttentionFusionModel, CrossAttnPdMConfig
+from mvmm.pdm.patchtst import PatchTST
+from mvmm.pdm.timeseries import TimesNet, TimesNetBlock
 
-__all__ = ["MultimodalPdMModel", "TimesNetBlock"]
+__all__ = [
+    "CrossAttentionFusionModel",
+    "CrossAttnPdMConfig",
+    "MultimodalPdMModel",
+    "PatchTST",
+    "TimesNet",
+    "TimesNetBlock",
+]
