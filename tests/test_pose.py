@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mvmm.pose.grasp import antipodal_grasps
+from mvmm.three_d.pose.grasp import antipodal_grasps
 
 
 def test_antipodal_grasps_on_synthetic_pair():

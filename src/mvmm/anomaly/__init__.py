@@ -1,10 +1,12 @@
-"""Anomaly / defect-detection algorithms.
+"""Image-level anomaly / defect-detection algorithms.
+
+For video anomaly detection (CCTV / surveillance), see `mvmm.vad`.
+For zero-shot anomaly with vision-language models, see `mvmm.zeroshot.anomaly_clip`.
 
 Module map:
-    base          — abstract base class for all detectors
+    base          — abstract base class for all image-AD detectors
     patchcore     — PatchCore (Roth et al. CVPR 2022) — memory-bank baseline
     efficient_ad  — EfficientAD (Batzner et al. WACV 2024) — real-time S/T+AE
-    anomaly_clip  — CLIP-based zero-shot AD (WinCLIP / AnomalyCLIP-style)
     hybrid        — rule-based + DL fusion for high-precision manufacturing
 """
 

@@ -21,13 +21,28 @@ from rich import print as rprint
 
 from mvmm import __version__
 
-app = typer.Typer(help="Machine Vision MultiModal — manufacturing AI CLI.", no_args_is_help=True)
+app = typer.Typer(
+    help="Machine Vision MultiModal — CCTV tracking, zero-shot perception, 3D, video anomaly, PdM.",
+    no_args_is_help=True,
+)
 
-anomaly_app = typer.Typer(help="Anomaly / defect detection commands.", no_args_is_help=True)
+track_app = typer.Typer(
+    help="CCTV / video object tracking (detect + track + analytics).", no_args_is_help=True
+)
+zeroshot_app = typer.Typer(
+    help="Zero-shot / open-vocabulary perception (CLIP, GDINO, SAM2).", no_args_is_help=True
+)
+depth_app = typer.Typer(help="3D depth estimation + point cloud export.", no_args_is_help=True)
+vad_app = typer.Typer(help="Video anomaly detection (frame-AE / MemAE).", no_args_is_help=True)
+anomaly_app = typer.Typer(help="Image-level anomaly / defect detection.", no_args_is_help=True)
 metrology_app = typer.Typer(help="Dimensional metrology commands.", no_args_is_help=True)
 pose_app = typer.Typer(help="6D pose & bin-picking commands.", no_args_is_help=True)
 pdm_app = typer.Typer(help="Predictive maintenance commands.", no_args_is_help=True)
 
+app.add_typer(track_app, name="track")
+app.add_typer(zeroshot_app, name="zeroshot")
+app.add_typer(depth_app, name="depth")
+app.add_typer(vad_app, name="vad")
 app.add_typer(anomaly_app, name="anomaly")
 app.add_typer(metrology_app, name="metrology")
 app.add_typer(pose_app, name="pose")
@@ -42,11 +57,16 @@ def info() -> None:
     def check(name: str) -> str:
         return "[green]ok[/]" if importlib.util.find_spec(name) else "[red]missing[/]"
 
-    rprint(f"  torch:       {check('torch')}")
-    rprint(f"  torchvision: {check('torchvision')}")
-    rprint(f"  open_clip:   {check('open_clip')}")
-    rprint(f"  open3d:      {check('open3d')}")
-    rprint(f"  faiss:       {check('faiss')}")
+    rprint(f"  torch:        {check('torch')}")
+    rprint(f"  torchvision:  {check('torchvision')}")
+    rprint(f"  open_clip:    {check('open_clip')}")
+    rprint(f"  open3d:       {check('open3d')}")
+    rprint(f"  faiss:        {check('faiss')}")
+    rprint(f"  ultralytics:  {check('ultralytics')}   [for tracking]")
+    rprint(f"  supervision:  {check('supervision')}   [for ByteTrack]")
+    rprint(f"  transformers: {check('transformers')}  [for GDINO/OWLv2]")
+    rprint(f"  sam2:         {check('sam2')}          [for SAM2]")
+    rprint(f"  gsplat:       {check('gsplat')}        [for 3D Gaussian Splatting]")
 
     try:
         import torch
@@ -152,10 +172,10 @@ def anomaly_zero_shot(
 ) -> None:
     """Run zero-shot anomaly scoring on a single image using CLIP prompts."""
 
-    from mvmm.anomaly.anomaly_clip import AnomalyCLIP
     from mvmm.common.io import load_image, save_image
     from mvmm.common.transforms import build_eval_transform
     from mvmm.common.viz import overlay_heatmap
+    from mvmm.zeroshot.anomaly_clip import AnomalyCLIP
 
     rgb = load_image(image)
     tfm = build_eval_transform()
@@ -179,8 +199,8 @@ def metrology_measure(
 ) -> None:
     """Segment with GrabCut then report bounding box + min-circle + line dimensions."""
     from mvmm.common.io import load_image, save_json
-    from mvmm.metrology.measure import circle_fit, dimension_from_mask, line_fit
-    from mvmm.metrology.segmentation import ClassicalSegmenter
+    from mvmm.three_d.metrology.measure import circle_fit, dimension_from_mask, line_fit
+    from mvmm.three_d.metrology.segmentation import ClassicalSegmenter
 
     rgb = load_image(image)
     h, w = rgb.shape[:2]
@@ -224,10 +244,10 @@ def pose_bin_pick(
     import numpy as np
 
     from mvmm.common.io import load_image, save_json
-    from mvmm.metrology.calibration import CameraIntrinsics
-    from mvmm.metrology.segmentation import ClassicalSegmenter
-    from mvmm.pose.grasp import antipodal_grasps
-    from mvmm.pose.pipeline import BinPickFrame, PosePipeline
+    from mvmm.three_d.metrology.calibration import CameraIntrinsics
+    from mvmm.three_d.metrology.segmentation import ClassicalSegmenter
+    from mvmm.three_d.pose.grasp import antipodal_grasps
+    from mvmm.three_d.pose.pipeline import BinPickFrame, PosePipeline
 
     rgb_arr = load_image(rgb)
     depth_arr = cv2.imread(str(depth), cv2.IMREAD_UNCHANGED).astype(np.float32)
@@ -380,6 +400,221 @@ def pdm_eval(
     rprint(f"[bold]PdM eval[/]  windows={len(tgt)}  accuracy={acc:.4f}  AUROC={auc:.4f}")
     rprint(f"  predictions: {np.bincount(pred, minlength=2).tolist()} (0 vs 1)")
     rprint(f"  ground truth: {np.bincount(tgt, minlength=2).tolist()} (0 vs 1)")
+
+
+# ===========================================================================
+# Tracking
+# ===========================================================================
+@track_app.command("video")
+def track_video(
+    input: Annotated[Path, typer.Option(help="Input video path (mp4 etc.).")],
+    output_video: Annotated[Path, typer.Option()] = Path("outputs/track.mp4"),
+    output_json: Annotated[Path, typer.Option()] = Path("outputs/track.json"),
+    detector: Annotated[str, typer.Option(help="yolo | grounding_dino")] = "yolo",
+    model: Annotated[
+        str, typer.Option(help="YOLO checkpoint name (e.g. yolov8n.pt, yolo11s.pt).")
+    ] = "yolov8n.pt",
+    classes: Annotated[str, typer.Option(help="Comma-separated class names to keep (empty=all).")] = "",
+    score_threshold: Annotated[float, typer.Option()] = 0.25,
+    frame_rate: Annotated[int, typer.Option()] = 30,
+    device: Annotated[str, typer.Option()] = "cuda",
+) -> None:
+    """Run an end-to-end CCTV tracking pipeline on a video."""
+    from mvmm.tracking import ByteTrackTracker, TrackingPipeline, build_detector
+
+    cls_list = [c.strip() for c in classes.split(",") if c.strip()] or None
+    det = (
+        build_detector(detector, model=model, device=device)
+        if detector == "yolo"
+        else build_detector(detector, device=device)
+    )
+    tracker = ByteTrackTracker(frame_rate=frame_rate, track_activation_threshold=score_threshold)
+    pipeline = TrackingPipeline(
+        detector=det, tracker=tracker, classes=cls_list, score_threshold=score_threshold
+    )
+    stats = pipeline.process_video(input, output_video=output_video, output_json=output_json)
+    rprint(f"[bold]Tracking done[/] — {stats.as_dict()}")
+    rprint(f"  annotated video: {output_video}")
+    rprint(f"  per-frame JSON:  {output_json}")
+
+
+# ===========================================================================
+# Zero-shot
+# ===========================================================================
+@zeroshot_app.command("detect")
+def zeroshot_detect(
+    image: Annotated[Path, typer.Option()],
+    classes: Annotated[str, typer.Option(help="Comma-separated text classes.")],
+    detector: Annotated[str, typer.Option(help="grounding_dino | owlv2")] = "grounding_dino",
+    output: Annotated[Path, typer.Option()] = Path("outputs/zeroshot_detect.png"),
+    device: Annotated[str, typer.Option()] = "cuda",
+    score_threshold: Annotated[float, typer.Option()] = 0.25,
+) -> None:
+    """Open-vocabulary detection on a single image: text prompt → boxes overlay."""
+    import cv2
+
+    from mvmm.common.io import load_image, save_image
+    from mvmm.tracking.detectors import GroundingDINODetector
+    from mvmm.zeroshot.owl_v2 import OWLv2Detector
+
+    cls_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not cls_list:
+        raise typer.BadParameter("--classes must contain at least one class")
+    rgb = load_image(image)
+    if detector == "grounding_dino":
+        det = GroundingDINODetector(device=device, box_threshold=score_threshold)
+    else:
+        det = OWLv2Detector(device=device, score_threshold=score_threshold)
+    dets = det(rgb, classes=cls_list)
+
+    overlay = rgb.copy()
+    for b, s, lab in zip(dets.boxes, dets.scores, dets.labels, strict=False):
+        x1, y1, x2, y2 = (int(v) for v in b)
+        name = dets.class_names[int(lab)] if 0 <= int(lab) < len(dets.class_names) else "?"
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 64, 64), 2)
+        cv2.putText(
+            overlay,
+            f"{name} {s:.2f}",
+            (x1, max(y1 - 6, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (255, 64, 64),
+            2,
+        )
+    save_image(output, overlay)
+    rprint(f"[bold]Detected {len(dets.boxes)} objects[/] — overlay saved to {output}")
+    for b, s, lab in zip(dets.boxes, dets.scores, dets.labels, strict=False):
+        name = dets.class_names[int(lab)] if 0 <= int(lab) < len(dets.class_names) else "?"
+        rprint(f"  {name:<24s} score={float(s):.3f}  bbox={[round(float(v), 1) for v in b]}")
+
+
+# ===========================================================================
+# Depth
+# ===========================================================================
+@depth_app.command("infer")
+def depth_infer(
+    image: Annotated[Path, typer.Option()],
+    output: Annotated[Path, typer.Option()] = Path("outputs/depth.png"),
+    output_ply: Annotated[Path, typer.Option()] = Path(""),
+    model_id: Annotated[str, typer.Option()] = "depth-anything/Depth-Anything-V2-Small-hf",
+    device: Annotated[str, typer.Option()] = "cuda",
+) -> None:
+    """Monocular depth (Depth Anything v2). Optionally export a PLY point cloud."""
+    import cv2
+    import numpy as np
+
+    from mvmm.common.io import load_image
+    from mvmm.common.viz import normalize01
+    from mvmm.three_d.depth import DepthAnythingV2
+    from mvmm.three_d.reconstruction import back_project, save_ply
+
+    rgb = load_image(image)
+    estimator = DepthAnythingV2(model_id=model_id, device=device)
+    depth = estimator(rgb)
+
+    # Save false-color depth visualization
+    vis = (normalize01(depth) * 255).astype(np.uint8)
+    vis_color = cv2.applyColorMap(vis, cv2.COLORMAP_INFERNO)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(output), vis_color)
+    rprint(f"[bold]Depth saved[/] {output}  (min={float(depth.min()):.3f}, max={float(depth.max()):.3f})")
+
+    if str(output_ply):
+        h, w = depth.shape
+        K = np.array([[w, 0, w / 2.0], [0, w, h / 2.0], [0, 0, 1.0]])  # rough default intrinsics
+        result = back_project(depth, K, rgb=rgb)
+        save_ply(str(output_ply), result["points"], result["colors"])
+        rprint(f"  PLY saved: {output_ply}  ({len(result['points'])} points)")
+
+
+# ===========================================================================
+# Video anomaly detection
+# ===========================================================================
+@vad_app.command("train")
+def vad_train(
+    train_root: Annotated[Path, typer.Option()],
+    epochs: Annotated[int, typer.Option()] = 10,
+    batch_size: Annotated[int, typer.Option()] = 32,
+    lr: Annotated[float, typer.Option()] = 1e-3,
+    image_size: Annotated[int, typer.Option()] = 128,
+    output: Annotated[Path, typer.Option()] = Path("checkpoints/vad_ae.pt"),
+    device: Annotated[str, typer.Option()] = "cuda",
+) -> None:
+    """Train the frame-AE VAD baseline on a folder of normal frames."""
+    import torch
+    from torch.utils.data import DataLoader
+    from torchvision import transforms as T
+
+    from mvmm.vad.conv_autoencoder import ConvAutoEncoder
+    from mvmm.vad.datasets import VideoFrameDataset
+
+    dev = device if torch.cuda.is_available() else "cpu"
+    tfm = T.Compose([T.Resize(image_size), T.CenterCrop(image_size), T.ToTensor()])
+    ds = VideoFrameDataset(train_root, transform=tfm, normals_only=True)
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=0)
+    model = ConvAutoEncoder().to(dev)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr)
+    crit = torch.nn.MSELoss()
+
+    rprint(f"[bold]VAD train[/]: samples={len(ds)} device={dev}")
+    for ep in range(epochs):
+        total = 0.0
+        for batch in loader:
+            x = batch["image"].to(dev).float()
+            loss = crit(model(x), x)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            total += loss.item() * x.shape[0]
+        rprint(f"  epoch {ep + 1}/{epochs}  recon_loss={total / max(len(ds), 1):.5f}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), output)
+    rprint(f"[green]Saved VAD model to[/] {output}")
+
+
+@vad_app.command("eval")
+def vad_eval(
+    test_root: Annotated[Path, typer.Option()],
+    labels: Annotated[Path, typer.Option()],
+    checkpoint: Annotated[Path, typer.Option()],
+    image_size: Annotated[int, typer.Option()] = 128,
+    batch_size: Annotated[int, typer.Option()] = 64,
+    device: Annotated[str, typer.Option()] = "cuda",
+) -> None:
+    """Score a folder of test frames; print AUROC + per-clip means."""
+    import numpy as np
+    import torch
+    from torch.utils.data import DataLoader
+    from torchvision import transforms as T
+
+    from mvmm.common.metrics import image_auroc
+    from mvmm.vad.conv_autoencoder import ConvAutoEncoder
+    from mvmm.vad.datasets import VideoFrameDataset
+
+    dev = device if torch.cuda.is_available() else "cpu"
+    tfm = T.Compose([T.Resize(image_size), T.CenterCrop(image_size), T.ToTensor()])
+    ds = VideoFrameDataset(test_root, transform=tfm, labels_csv=labels, normals_only=False)
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=0)
+    model = ConvAutoEncoder().to(dev)
+    model.load_state_dict(torch.load(checkpoint, map_location=dev, weights_only=True))
+    model.eval()
+
+    scores, lbls, vids = [], [], []
+    with torch.no_grad():
+        for batch in loader:
+            x = batch["image"].to(dev).float()
+            s = model.anomaly_score(x).cpu().numpy()
+            scores.append(s)
+            lbls.append(np.asarray(batch["label"]))
+            vids.extend(batch["video"])
+    scores = np.concatenate(scores)
+    lbls = np.concatenate(lbls)
+    rprint(f"[bold]VAD eval[/]  frames={len(lbls)}  AUROC={image_auroc(scores, lbls):.4f}")
+    by_video: dict[str, list[float]] = {}
+    for v, s in zip(vids, scores, strict=False):
+        by_video.setdefault(v, []).append(float(s))
+    for v, ss in sorted(by_video.items()):
+        rprint(f"  {v:<28s}  mean={np.mean(ss):.5f}  max={np.max(ss):.5f}")
 
 
 if __name__ == "__main__":  # pragma: no cover
