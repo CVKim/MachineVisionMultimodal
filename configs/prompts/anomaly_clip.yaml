@@ -1,0 +1,49 @@
+# Prompt sets for the zero-shot anomaly-detection eval harness.
+#
+# Each top-level key is a *named* prompt set with `normal` and `anomaly`
+# template lists. `{obj}` is replaced with --object-name at run time.
+
+generic:
+  normal:
+    - "a flawless {obj}"
+    - "a clean {obj}"
+  anomaly:
+    - "a defective {obj}"
+    - "a {obj} with a scratch"
+    - "a damaged {obj}"
+
+semiconductor:
+  normal:
+    - "a pristine wafer surface"
+    - "a die without contamination"
+    - "a wafer with uniform pattern"
+  anomaly:
+    - "a wafer with a particle defect"
+    - "a wafer with a scratch"
+    - "a die with a missing pattern"
+    - "a wafer with contamination"
+    - "a die with a bridging defect"
+
+automotive:
+  normal:
+    - "a metal automotive part with smooth surface"
+    - "a clean machined part"
+    - "a flawless cast aluminum component"
+  anomaly:
+    - "an automotive part with a scratch"
+    - "a cast part with a porosity defect"
+    - "a machined part with a burr"
+    - "a metal part with a dent"
+    - "a part with corrosion"
+
+surveillance:
+  normal:
+    - "a quiet warehouse aisle"
+    - "an empty production floor"
+    - "a normal CCTV view"
+  anomaly:
+    - "a person falling"
+    - "a fire breaking out"
+    - "an unauthorized intrusion"
+    - "smoke rising"
+    - "broken equipment on the floor"

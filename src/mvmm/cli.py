@@ -433,7 +433,7 @@ def track_video(
         detector=det, tracker=tracker, classes=cls_list, score_threshold=score_threshold
     )
     stats = pipeline.process_video(input, output_video=output_video, output_json=output_json)
-    rprint(f"[bold]Tracking done[/] — {stats.as_dict()}")
+    rprint(f"[bold]Tracking done[/]: {stats.as_dict()}")
     rprint(f"  annotated video: {output_video}")
     rprint(f"  per-frame JSON:  {output_json}")
 
@@ -482,7 +482,7 @@ def zeroshot_detect(
             2,
         )
     save_image(output, overlay)
-    rprint(f"[bold]Detected {len(dets.boxes)} objects[/] — overlay saved to {output}")
+    rprint(f"[bold]Detected {len(dets.boxes)} objects[/] -> overlay saved to {output}")
     for b, s, lab in zip(dets.boxes, dets.scores, dets.labels, strict=False):
         name = dets.class_names[int(lab)] if 0 <= int(lab) < len(dets.class_names) else "?"
         rprint(f"  {name:<24s} score={float(s):.3f}  bbox={[round(float(v), 1) for v in b]}")

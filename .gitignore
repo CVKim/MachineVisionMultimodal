@@ -70,6 +70,8 @@ data/raw/
 data/processed/
 data/external/
 data/interim/
+# public CCTV demo videos — fetched on demand by scripts/fetch_demo_assets.py
+data/demo/cctv/
 !data/**/.gitkeep
 !data/sample/
 
