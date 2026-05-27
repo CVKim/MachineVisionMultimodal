@@ -268,8 +268,10 @@ def pdm_train(
     sensor_cols: Annotated[str, typer.Option(help="Comma-separated sensor column names.")],
     target_col: Annotated[str, typer.Option()],
     seq_len: Annotated[int, typer.Option()] = 512,
+    stride: Annotated[int, typer.Option(help="Sliding-window stride (timesteps).")] = 256,
     epochs: Annotated[int, typer.Option()] = 5,
     batch_size: Annotated[int, typer.Option()] = 32,
+    num_workers: Annotated[int, typer.Option()] = 0,
     device: Annotated[str, typer.Option()] = "cuda",
     output: Annotated[Path, typer.Option()] = Path("./checkpoints/pdm.pt"),
 ) -> None:
@@ -287,9 +289,11 @@ def pdm_train(
         seq_len=seq_len,
         sensor_cols=cols,
         target_col=target_col,
+        stride=stride,
         transform=build_train_transform(),
     )
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    rprint(f"[bold]PdM dataset[/]: {len(ds)} windows, seq_len={seq_len}, stride={stride}")
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     model = MultimodalPdMModel(PdMConfig(n_sensor_channels=len(cols), sensor_seq_len=seq_len)).to(device)
     opt = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=3e-4)
     crit = torch.nn.CrossEntropyLoss()
@@ -316,6 +320,66 @@ def pdm_train(
     output.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), output)
     rprint(f"[green]Saved PdM model to[/] {output}")
+
+
+@pdm_app.command("eval")
+def pdm_eval(
+    table: Annotated[Path, typer.Option()],
+    sensor_cols: Annotated[str, typer.Option(help="Comma-separated sensor column names.")],
+    target_col: Annotated[str, typer.Option()],
+    checkpoint: Annotated[Path, typer.Option()],
+    seq_len: Annotated[int, typer.Option()] = 512,
+    stride: Annotated[int, typer.Option()] = 256,
+    batch_size: Annotated[int, typer.Option()] = 16,
+    device: Annotated[str, typer.Option()] = "cuda",
+) -> None:
+    """Score a saved PdM model on a labeled table and report accuracy + AUROC."""
+    import numpy as np
+    import torch
+    from torch.utils.data import DataLoader
+
+    from mvmm.common.metrics import image_auroc
+    from mvmm.common.transforms import build_eval_transform
+    from mvmm.pdm.datasets import PdMSlidingWindowDataset
+    from mvmm.pdm.fusion import MultimodalPdMModel, PdMConfig
+
+    cols = [c.strip() for c in sensor_cols.split(",") if c.strip()]
+    ds = PdMSlidingWindowDataset(
+        table_path=table,
+        seq_len=seq_len,
+        sensor_cols=cols,
+        target_col=target_col,
+        stride=stride,
+        transform=build_eval_transform(),
+    )
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=0)
+    model = MultimodalPdMModel(PdMConfig(n_sensor_channels=len(cols), sensor_seq_len=seq_len)).to(device)
+    model.load_state_dict(torch.load(checkpoint, map_location=device, weights_only=True))
+    model.eval()
+
+    all_pred, all_prob, all_tgt = [], [], []
+    with torch.no_grad():
+        for batch in loader:
+            sensor = batch["sensor"].to(device).float()
+            img = batch["image"]
+            if img is None or (hasattr(img, "numel") and img.numel() == 0):
+                img = torch.zeros(sensor.shape[0], 3, 224, 224, device=device)
+            else:
+                img = img.to(device).float()
+            logits = model(sensor, img)
+            prob = torch.softmax(logits, dim=-1)[:, 1]
+            all_pred.append(logits.argmax(dim=-1).cpu().numpy())
+            all_prob.append(prob.cpu().numpy())
+            all_tgt.append(batch["target"].long().numpy())
+
+    pred = np.concatenate(all_pred)
+    prob = np.concatenate(all_prob)
+    tgt = np.concatenate(all_tgt)
+    acc = float((pred == tgt).mean())
+    auc = image_auroc(prob, tgt)
+    rprint(f"[bold]PdM eval[/]  windows={len(tgt)}  accuracy={acc:.4f}  AUROC={auc:.4f}")
+    rprint(f"  predictions: {np.bincount(pred, minlength=2).tolist()} (0 vs 1)")
+    rprint(f"  ground truth: {np.bincount(tgt, minlength=2).tolist()} (0 vs 1)")
 
 
 if __name__ == "__main__":  # pragma: no cover
