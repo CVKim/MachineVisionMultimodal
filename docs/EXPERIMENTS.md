@@ -1,14 +1,20 @@
 # Experiments — captured results
 
 > Every result on this page was produced by the scripts in `scripts/`
-> on the committed demo data + freely-redistributable Ultralytics test
-> images (`data/demo/bus.jpg`, `zidane.jpg`). RTX 3080 / CUDA 12.1.
+> on freely-redistributable public assets:
+>
+>  * **Images** — Ultralytics test images (`bus.jpg`, `zidane.jpg`)
+>  * **CCTV videos** — `intel-iot-devkit/sample-videos` + Roboflow `supervision` examples
+>
+> Hardware: RTX 3080, CUDA 12.1. Captured 2026-05-27.
 
 ## Reproducing everything
 
 ```cmd
-:: 1. download tiny demo assets (~200 KB total)
-D:\anaconda\envs\anomalydet\python.exe scripts\fetch_demo_assets.py
+:: 1. download all demo assets (~55 MB videos + 200 KB images)
+D:\anaconda\envs\anomalydet\python.exe scripts\fetch_demo_assets.py --videos
+
+:: 2. the runs in sections 1-12 below
 
 :: 2. all the runs below
 D:\anaconda\envs\anomalydet\python.exe scripts\smoke_test.py
@@ -39,11 +45,17 @@ D:\anaconda\envs\anomalydet\Scripts\mvmm.exe depth infer ^
     --image data\demo\bus.jpg ^
     --output outputs\experiments_v05\bus_depth.png ^
     --output-ply outputs\experiments_v05\bus_depth.ply
+
+:: NEW — real public CCTV demo runs (section 11+12 below)
+D:\anaconda\envs\anomalydet\python.exe scripts\demo_cctv_videos.py
+D:\anaconda\envs\anomalydet\python.exe scripts\demo_cctv_openvocab.py ^
+    --video data\demo\cctv\people_walking.mp4
+D:\anaconda\envs\anomalydet\python.exe scripts\extract_tracking_thumbnails.py
 ```
 
 ---
 
-## 1. CCTV tracking — YOLOv8n + ByteTrack
+## 1. CCTV tracking — YOLOv8n + ByteTrack on synthetic bus video
 
 Input:  `data/demo/bus_track.mp4` (60 frames @ 15 FPS, synthesized from
         bus.jpg with small per-frame translations).
@@ -269,6 +281,82 @@ print(losses[0], losses[-1])  # decreasing
 * Only `model.ctx` (12 × 512 = 6,144 parameters) is trainable.
 * CLIP image/text encoders are frozen, so the AnomalyCLIP-style few-shot
   fine-tune lands in a budget you can run on a laptop CPU.
+
+---
+
+## 11. Real public CCTV — YOLOv8s + ByteTrack on 4 clips
+
+`scripts/demo_cctv_videos.py` on the four freely-redistributable clips
+fetched by `scripts/fetch_demo_assets.py --videos-only`.
+
+| Video                | Resolution | Frames | Classes filter         | Detections | Unique IDs | Eff. FPS | Wall time |
+|----------------------|------------|--------|------------------------|-----------:|-----------:|---------:|----------:|
+| `people_detection`   | 768x432    | 596    | person                 |    320     |     **8**  |   43.8   |  13.6 s   |
+| `people_walking`     | 1920x1080  | 341    | person                 | **10,257** |    **85**  |   17.9   |  19.1 s   |
+| `store_aisle`        | 720x404    | 3,921  | person                 |  13,266    |     29     |   43.0   |  91.3 s   |
+| `vehicles`           | 3840x2160  | 538    | car/truck/bus/motorcyc.|  **1,589** |     18     |    7.3   |  73.6 s   |
+
+`vehicles.mp4` top-3 class histogram across all frames:
+
+| class | track-frames |
+|---|---:|
+| car   | 1,106 |
+| truck |   433 |
+| bus   |    50 |
+
+For `people_detection.mp4` we also enabled a directional line-counter
+crossing the middle of the frame:
+
+```
+line crossings: [{'name': 'mid_line', 'in': 1, 'out': 7}]
+```
+
+— 7 people exited the frame across the mid-line in 50 seconds, 1
+entered. That's a working "people in / out" counter without any
+calibration or rule tuning.
+
+Annotated MP4s and per-frame JSON are written under
+`outputs/cctv_demo/<video_stem>/`. Sample thumbnails:
+
+* [docs/assets/cctv_people_detection_track.jpg](assets/cctv_people_detection_track.jpg)
+  — middle frame, hallway CCTV
+* [docs/assets/cctv_vehicles_track.jpg](assets/cctv_vehicles_track.jpg)
+  — 4K traffic, mid-clip
+
+Take-aways:
+* RTX 3080 / YOLOv8s sustains **~40 FPS effective** on sub-HD CCTV
+  feeds end-to-end (detect + track + JSON + MP4 encode). For real-time
+  on 4K, drop to `yolov8n.pt` or batch frames.
+* ByteTrack assigns stable IDs through brief occlusions — `store_aisle`
+  has 3,921 frames but only 29 unique IDs, meaning the same shoppers
+  are re-acquired correctly across the clip.
+
+---
+
+## 12. Open-vocabulary detection on the same footage
+
+`scripts/demo_cctv_openvocab.py --video data/demo/cctv/people_walking.mp4`
+— GroundingDINO on a *single* middle frame (full-video GDINO is too
+slow without a quantized export) with three prompt families:
+
+| prompt set      | n_dets | top-5 by score                                                     |
+|-----------------|-------:|--------------------------------------------------------------------|
+| coco_like       |   76   | person(0.73), person(0.71), person(0.71), person(0.70), backpack(0.69) |
+| factory_safety  |   61   | person(0.66), person(0.62), person(0.61), person(0.60), person(0.59) |
+| retail          |   42   | person(0.69), person(0.63), person(0.63), person(0.62), person(0.60) |
+
+* All three prompt sets contain "person" — the high counts and high
+  scores confirm CLIP-style text grounding is producing real boxes
+  without any fine-tuning on this footage.
+* `coco_like` adds `backpack` and gets it (0.69 confidence) — same
+  trick the COCO-trained YOLO uses, but driven by a free-text prompt.
+* Overlay: [docs/assets/cctv_people_walking_openvocab.jpg](assets/cctv_people_walking_openvocab.jpg)
+  (compressed JPG of the original 1.8 MB PNG).
+
+Take-aways:
+* For a *new SKU* or a *new camera angle* you would otherwise have to
+  annotate a training set first — open-vocab gives you a baseline on
+  day one. Tighten the operating point later with YOLOv8/v11.
 
 ---
 

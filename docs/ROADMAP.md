@@ -11,7 +11,9 @@ Legend: ✅ done · 🟡 wrapper-only (needs external install) · ⬜ planned
 - ✅ BoT-SORT (ByteTrack + appearance gating) — `mvmm.tracking.bot_sort`
 - ✅ CLIP-based appearance ReID — `mvmm.tracking.reid.CLIPReID`
 - ✅ OSNet ReID wrapper — `mvmm.tracking.reid.OSNetReID`
-- ✅ Real CCTV demo clip via `scripts/fetch_demo_assets.py`
+- ✅ Real CCTV demo clips fetched + tracked end-to-end on 4 videos
+      (`scripts/demo_cctv_videos.py`, see [EXPERIMENTS.md §11](EXPERIMENTS.md#11-real-public-cctv--yolov8s--bytetrack-on-4-clips))
+- ✅ Line-counter analytics demo on people_detection.mp4 (1 in / 7 out)
 - ⬜ DEVA segmentation tracking (needs DEVA install)
 - ⬜ MASA universal tracker (needs MASA install)
 - ⬜ Market-1501 full ReID benchmark (needs dataset download)

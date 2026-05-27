@@ -156,9 +156,13 @@ class GroundingDINODetector:
         # Each detected text-phrase is matched back to the closest class.
         boxes = results["boxes"].detach().cpu().numpy().astype(np.float32)
         scores = results["scores"].detach().cpu().numpy().astype(np.float32)
-        phrases = [str(p) for p in results["labels"]]
+        phrases = [str(p) for p in results.get("labels", [])]
         labels = np.zeros(len(boxes), dtype=np.int64)
-        for i, ph in enumerate(phrases):
+        # ``phrases`` and ``boxes`` should align, but some transformers versions
+        # emit a phrases list with a trailing empty token. Only iterate up to
+        # the boxes length to avoid index-out-of-bounds on size-0 outputs.
+        for i in range(min(len(phrases), len(boxes))):
+            ph = phrases[i]
             matched = next((j for j, c in enumerate(classes) if c.lower() in ph.lower()), 0)
             labels[i] = matched
         return Detections(boxes=boxes, scores=scores, labels=labels, class_names=list(classes))
