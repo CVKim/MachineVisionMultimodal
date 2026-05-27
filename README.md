@@ -1,6 +1,9 @@
-# MachineVisionMultimodal (`mvmm`)
+# mvmm — Multimodal Perception Stack for Industrial CCTV & 3D
 
-> SOTA multimodal machine-vision algorithms for manufacturing: defect detection, 6D pose / bin-picking, dimensional metrology, and predictive maintenance.
+> Production-grade reference implementations of the 2024–2026 SOTA stack for
+> **CCTV / video tracking · zero-shot perception · 3D scene understanding ·
+> predictive maintenance + video anomaly detection**, with a single CLI and
+> a one-shot inference dump.
 
 [![CI](https://github.com/CVKim/MachineVisionMultimodal/actions/workflows/ci.yml/badge.svg)](https://github.com/CVKim/MachineVisionMultimodal/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -11,71 +14,93 @@
 
 ## Table of Contents
 
-1. [What is this?](#1-what-is-this)
-2. [Status matrix](#2-status-matrix)
+1. [Why this repo exists](#1-why-this-repo-exists)
+2. [The four pillars (and their SOTA)](#2-the-four-pillars-and-their-sota)
 3. [Repository layout](#3-repository-layout)
 4. [Installation](#4-installation)
-   - [4.1 Conda (recommended for GPU)](#41-conda-recommended-for-gpu)
+   - [4.1 Conda (recommended)](#41-conda-recommended)
    - [4.2 pip / venv](#42-pip--venv)
    - [4.3 Docker](#43-docker)
    - [4.4 Verifying the install](#44-verifying-the-install)
-5. [Quickstart — the 5-minute smoke run](#5-quickstart--the-5-minute-smoke-run)
-6. [Module guides](#6-module-guides)
-   - [6.1 Anomaly detection — `mvmm.anomaly`](#61-anomaly-detection--mvmmanomaly)
-   - [6.2 Dimensional metrology — `mvmm.metrology`](#62-dimensional-metrology--mvmmmetrology)
-   - [6.3 6D pose & bin picking — `mvmm.pose`](#63-6d-pose--bin-picking--mvmmpose)
-   - [6.4 Predictive maintenance — `mvmm.pdm`](#64-predictive-maintenance--mvmmpdm)
-7. [CLI reference](#7-cli-reference)
-8. [Configuration system (Hydra)](#8-configuration-system-hydra)
-9. [Testing & continuous integration](#9-testing--continuous-integration)
-10. [Branching & contribution workflow](#10-branching--contribution-workflow)
-11. [Domain → algorithm mapping](#11-domain--algorithm-mapping)
-12. [Roadmap & references](#12-roadmap--references)
-13. [Troubleshooting / FAQ](#13-troubleshooting--faq)
-14. [License](#14-license)
+5. [The 5-command tour](#5-the-5-command-tour)
+6. [Pillar 1 — CCTV tracking](#6-pillar-1--cctv-tracking)
+7. [Pillar 2 — Zero-shot / open-vocabulary perception](#7-pillar-2--zero-shot--open-vocabulary-perception)
+8. [Pillar 3 — 3D scene understanding](#8-pillar-3--3d-scene-understanding)
+9. [Pillar 4 — PdM + Video Anomaly Detection](#9-pillar-4--pdm--video-anomaly-detection)
+10. [One-shot inference dump](#10-one-shot-inference-dump)
+11. [Gradio demo](#11-gradio-demo)
+12. [CLI reference](#12-cli-reference)
+13. [Testing & CI](#13-testing--ci)
+14. [Branching & contribution workflow](#14-branching--contribution-workflow)
+15. [Roadmap & references](#15-roadmap--references)
+16. [Troubleshooting / FAQ](#16-troubleshooting--faq)
+17. [License](#17-license)
 
 ---
 
-## 1. What is this?
+## 1. Why this repo exists
 
-`mvmm` is a **single repository, four pipelines** for applying 2024–2026
-state-of-the-art computer-vision research to four problems that come up
-constantly in real manufacturing lines:
+This is a curated, runnable reference stack for the four most career-relevant
+problems in industrial CV in 2025–2026:
 
-| Problem | Module | Representative SOTA |
-|---|---|---|
-| Visual inspection / defect detection | [`mvmm.anomaly`](src/mvmm/anomaly) | PatchCore, EfficientAD, AnomalyCLIP, MultiADS, MuSc-V2 |
-| Dimensional measurement | [`mvmm.metrology`](src/mvmm/metrology) | SAM2, Depth Anything v2, classical calibration |
-| Bin picking / 6D pose | [`mvmm.pose`](src/mvmm/pose) | FoundationPose, SuperPose, Any6D, GraspNet |
-| Predictive maintenance | [`mvmm.pdm`](src/mvmm/pdm) | TimesNet, PatchTST + vision fusion |
+| Pillar | Real-world impact |
+|---|---|
+| **CCTV tracking** | Worker safety zones, AGV / forklift / pallet tracking, line monitoring, behavior analytics |
+| **Zero-shot perception** | New-SKU first-day inspection, text-prompted detection on unlabeled cameras |
+| **3D scene understanding** | Depth, 6D pose for bin picking, point clouds, digital-twin assets via Gaussian splatting |
+| **PdM + Video Anomaly** | Equipment health from sensors + camera, abnormal-event detection on CCTV |
 
-The repo is intentionally **hybrid** — every module exposes a classical
-(rule-based) baseline next to its deep-learning counterpart, so you can
-swap in whichever gives the better operating-point on your line.
+Each pillar ships:
+- A working baseline you can run today
+- Wrappers for the current SOTA models (lazy-imported)
+- A CLI subcommand and demo script
+- Tests covering the pure-Python logic (CPU-only, fast)
 
-### Why hybrid?
-
-* Deep models hallucinate on out-of-distribution illumination.
-* Rule-based pipelines miss subtle texture/pattern anomalies.
-* Confidence-weighted fusion gives **both** explainability ("the rule
-  fired because LBP rarity > τ") **and** recall (DL catches the rest).
+The legacy manufacturing modules (PatchCore image AD, MVTec metrology,
+6D-pose bin pick) are still here under `three_d/` and `anomaly/` —
+nothing was deleted, only re-organized.
 
 ---
 
-## 2. Status matrix
+## 2. The four pillars (and their SOTA)
 
-| Module | Status | Notes |
+### CCTV tracking — `mvmm.tracking`
+| Component | Implementation | SOTA reference |
 |---|---|---|
-| `anomaly.PatchCore` | ✅ Working baseline | Greedy coreset + optional FAISS |
-| `anomaly.EfficientAD` | 🟡 Architecture only | Training loop is on the v0.2 roadmap |
-| `anomaly.AnomalyCLIP` | ✅ Zero-shot inference | `open_clip` ViT-B/16 |
-| `anomaly.hybrid` | ✅ Working | Canny + LBP + intensity z-score ensemble |
-| `metrology.*` | ✅ Classical + SAM2 / DepthAnything wrappers | Wrappers lazy-import |
-| `pose.PosePipeline` | ✅ Classical seg + antipodal grasps | FoundationPose plugged via env var |
-| `pdm.MultimodalPdMModel` | ✅ Forward pass + CLI training | Data adapters are next |
-| Docker / CI / tests | ✅ Pass on CPU runners | Smoke + module tests |
+| Detector | YOLOv8/v11, RT-DETR via `ultralytics` | YOLO-World, RT-DETR |
+| Open-vocab detector | GroundingDINO via HF transformers | Grounding DINO 1.5 |
+| Tracker | ByteTrack via `supervision` | ByteTrack, BoT-SORT, MASA |
+| Video segmentation | SAM2 video predictor wrapper | SAM2 (Meta, 2024) |
+| Appearance ReID | CLIP image embeddings + OSNet | TransReID 2024 line |
+| Analytics | Polygon zones, line crossing, dwell timers | — |
 
-Legend: ✅ ready to use · 🟡 partially implemented · ⬜ planned
+### Zero-shot — `mvmm.zeroshot`
+| Task | Implementation | SOTA reference |
+|---|---|---|
+| Image anomaly | `AnomalyCLIP` (WinCLIP-style windowed) | AnomalyCLIP (ICLR'24), MuSc-V2 |
+| Open-vocab detection | GroundingDINO + OWLv2 | OWLv2, GDINO 1.5 |
+| Promptable segmentation | SAM2 image predictor wrapper | SAM2 |
+| Detect → segment pipeline | `OpenVocabPipeline` | Grounded-SAM-2 |
+
+### 3D — `mvmm.three_d`
+| Task | Implementation | SOTA reference |
+|---|---|---|
+| Monocular depth | Depth Anything v2 (HF transformers) | DAv2, MoGe, Marigold |
+| Stereo depth | OpenCV SGBM | — |
+| 6D pose (CAD-based) | FoundationPose wrapper | FoundationPose (CVPR'24 highlight) |
+| 6D pose (CAD-free) | Any6D wrapper | Any6D (CVPR'25) |
+| Scene reconstruction | depth → point cloud → PLY | — |
+| Gaussian splatting | `gsplat` backend wrapper | 3DGS (SIGGRAPH'23) |
+| Grasping | Antipodal sampler | AnyGrasp |
+| Metrology | Calibration · GrabCut/SAM2 segmentation · circle/line/rect fit | — |
+
+### PdM + VAD — `mvmm.pdm`, `mvmm.vad`
+| Task | Implementation | SOTA reference |
+|---|---|---|
+| Multivariate time-series | TimesNet | TimesNet, PatchTST, TimeLLM |
+| Multimodal PdM | TimesNet + frozen ResNet fusion (concat MLP) | — |
+| Video anomaly | Frame autoencoder + MemAE | MemAE, MGFN, MULDE |
+| VAD dataset adapter | Flat & nested image-folder layouts | UCF-Crime, ShanghaiTech |
 
 ---
 
@@ -83,495 +108,508 @@ Legend: ✅ ready to use · 🟡 partially implemented · ⬜ planned
 
 ```
 src/mvmm/
-├── anomaly/            # PatchCore, EfficientAD, AnomalyCLIP, Hybrid rule+DL
-│   ├── base.py
-│   ├── patchcore.py
-│   ├── efficient_ad.py
-│   ├── anomaly_clip.py
-│   └── hybrid.py
-├── metrology/          # calibration, SAM2/GrabCut, Depth Anything, primitives
-│   ├── calibration.py
-│   ├── segmentation.py
-│   ├── depth.py
-│   └── measure.py
-├── pose/               # FoundationPose wrapper, ICP, grasps, bin-pick pipeline
-│   ├── icp_classical.py
-│   ├── foundation_pose.py
-│   ├── grasp.py
-│   └── pipeline.py
-├── pdm/                # TimesNet + Vision multimodal PdM
-│   ├── timeseries.py
-│   ├── vision.py
-│   ├── fusion.py
+├── tracking/           # CCTV tracking pipeline
+│   ├── detectors.py        # YOLO, GroundingDINO
+│   ├── byte_track.py       # ByteTrack online tracker
+│   ├── sam2_video.py       # SAM2 video predictor wrapper
+│   ├── reid.py             # CLIP / OSNet appearance ReID
+│   ├── analytics.py        # zones, line counters, dwell timers
+│   └── pipeline.py         # end-to-end detect → track → annotate
+├── zeroshot/           # Open-vocabulary perception
+│   ├── grounding_dino.py
+│   ├── owl_v2.py
+│   ├── sam2_promptable.py
+│   ├── anomaly_clip.py     # image-level zero-shot AD
+│   └── pipeline.py         # text → boxes → masks
+├── three_d/            # 3D perception
+│   ├── depth/              # DepthAnythingV2, MoGe, Marigold, SGBM
+│   ├── pose/               # FoundationPose, Any6D, ICP, grasps
+│   ├── metrology/          # calibration, segmentation, measurement
+│   ├── reconstruction.py   # depth → point cloud, PLY export
+│   └── gaussian_splatting.py  # gsplat wrapper
+├── vad/                # Video anomaly detection
+│   ├── conv_autoencoder.py
+│   ├── memae.py
 │   └── datasets.py
-├── common/             # dataset, transforms, metrics (AUROC/PRO), viz, IO
-│   ├── data.py
-│   ├── transforms.py
-│   ├── metrics.py
-│   ├── viz.py
-│   └── io.py
-└── cli.py              # Typer CLI: `mvmm <subcommand>`
-configs/                # Hydra configs (anomaly / data / hardware)
-scripts/                # download / make_sample_data / smoke_test / train_* / eval_*
-tests/                  # pytest (CPU-only smoke + interface)
+├── pdm/                # Predictive maintenance
+│   ├── timeseries.py       # TimesNet
+│   ├── vision.py           # frozen image backbone
+│   ├── fusion.py           # multimodal classifier / RUL
+│   └── datasets.py
+├── anomaly/            # Image-level AD (PatchCore + hybrid)
+├── common/             # data, transforms, metrics, viz, io
+├── serving/            # Gradio app
+└── cli.py              # `mvmm <subcommand>`
+configs/                # Hydra configs
+scripts/                # train_* / eval_* / make_sample_* / dump_all_results
+tests/                  # pytest (CPU-only, no network)
 docs/                   # ROADMAP, ARCHITECTURE, papers.md
-.github/                # CI, PR/Issue templates
-data/sample/            # Committed synthetic dataset for CI/smoke
-Dockerfile · docker-compose.yml · environment.yml · pyproject.toml
+data/sample/            # committed synthetic datasets (widget AD, motor PdM, vad, cctv)
 ```
 
 ---
 
 ## 4. Installation
 
-There are three supported paths. Pick one — they all give you the same
-`mvmm` Python API and CLI.
-
-### 4.1 Conda (recommended for GPU)
-
-The conda recipe pins CUDA 12.1, PyTorch 2.x, FAISS-GPU and OpenCV — the
-fastest path to a working RTX 30xx / 40xx environment.
+### 4.1 Conda (recommended)
 
 ```bash
 conda env create -f environment.yml
 conda activate mvmm
-```
-
-The recipe runs `pip install -e .` at the end, so `mvmm` is immediately
-importable. If you only need parts of the stack:
-
-```bash
-conda env create -f environment.yml
-conda activate mvmm
-pip install -e ".[anomaly,viz]"     # subset extras
+pip install ultralytics supervision    # tracking extras
 ```
 
 ### 4.2 pip / venv
 
-If you prefer a vanilla venv, install PyTorch **first** with the wheel
-matching your CUDA, then the rest:
-
 ```bash
 python -m venv .venv
-# Windows
-.\.venv\Scripts\Activate.ps1
-# Linux / macOS
-source .venv/bin/activate
+.venv\Scripts\activate.bat              # cmd.exe
+# .\.venv\Scripts\Activate.ps1          # PowerShell
 
-# PyTorch with CUDA 12.1 (skip --index-url for CPU)
 pip install --index-url https://download.pytorch.org/whl/cu121 \
     torch torchvision torchaudio
-
-# Project + all extras
-pip install -e ".[all]"
+pip install -e ".[all]" ultralytics supervision
 ```
-
-Available extras: `torch`, `anomaly`, `pose`, `pdm`, `viz`, `dev`, `all`.
 
 ### 4.3 Docker
 
-Reproducible CUDA 12.1 image (~5 GB). Requires
-[`nvidia-container-toolkit`](https://github.com/NVIDIA/nvidia-container-toolkit)
-on the host.
-
 ```bash
 docker compose build mvmm
-docker compose run --rm mvmm mvmm info        # interactive smoke
-docker compose run --rm mvmm python scripts/smoke_test.py
-# Jupyter on http://localhost:8888 (no token)
-docker compose up jupyter
+docker compose run --rm mvmm mvmm info
+docker compose up jupyter    # http://localhost:8888
 ```
-
-Source / data / cache are bind-mounted, so edits on the host are
-immediately visible in the container.
 
 ### 4.4 Verifying the install
 
-```bash
+```cmd
 mvmm info
 ```
 
-Expected output:
+Expected output (your environment may show some libs as missing — those
+modules will surface a clear install message when you call them):
 
 ```
 mvmm version 0.1.0
-  torch:       ok
-  torchvision: ok
-  open_clip:   ok
-  open3d:      ok
-  faiss:       ok
-  cuda avail:  yes
+  torch:        ok
+  torchvision:  ok
+  open_clip:    ok
+  open3d:       missing
+  faiss:        ok
+  ultralytics:  ok    [for tracking]
+  supervision:  ok    [for ByteTrack]
+  transformers: ok    [for GDINO/OWLv2]
+  sam2:         missing [for SAM2]
+  gsplat:       missing [for 3D Gaussian Splatting]
+  cuda avail:   yes
    gpu[0]: NVIDIA GeForce RTX 3080
    gpu[1]: NVIDIA GeForce RTX 3080
 ```
 
-Anything marked `missing` means the optional extra isn't installed; that
-module's CLI commands will tell you exactly what to `pip install` when
-you try them.
+---
+
+## 5. The 5-command tour
+
+Each of these is < 30 seconds on an RTX 3080. They use only the
+committed synthetic samples — no downloads, no internet.
+
+```cmd
+:: 1. Sanity (PatchCore image AD on synthetic widget data)
+python scripts\smoke_test.py
+
+:: 2. Zero-shot CLIP prompt comparison
+python scripts\demo_zero_shot_prompts.py
+
+:: 3. PdM train + eval on synthetic motor data
+mvmm pdm train --table data\sample\pdm\motor.csv ^
+    --sensor-cols "vib_x,vib_y,current" --target-col health ^
+    --seq-len 512 --stride 512 --epochs 5 --batch-size 16 ^
+    --output checkpoints\pdm_motor.pt
+mvmm pdm eval --table data\sample\pdm\motor.csv ^
+    --sensor-cols "vib_x,vib_y,current" --target-col health ^
+    --checkpoint checkpoints\pdm_motor.pt --seq-len 512 --stride 512
+
+:: 4. VAD train + eval on synthetic CCTV anomaly data
+python scripts\make_vad_sample_data.py
+mvmm vad train --train-root data\sample\vad\train\normal --epochs 15 ^
+    --output checkpoints\vad_ae.pt
+mvmm vad eval --test-root data\sample\vad\test ^
+    --labels data\sample\vad\labels.csv --checkpoint checkpoints\vad_ae.pt
+
+:: 5. CCTV tracking end-to-end on a synthetic clip
+python scripts\make_track_sample_video.py
+mvmm track video --input data\sample\track\sample.mp4 ^
+    --output-video outputs\track_sample.mp4 ^
+    --output-json  outputs\track_sample.json --model yolov8n.pt
+```
 
 ---
 
-## 5. Quickstart — the 5-minute smoke run
+## 6. Pillar 1 — CCTV tracking
 
-This is the recommended first thing to run after install — no network,
-no MVTec download, no API keys.
-
-```bash
-python scripts/smoke_test.py
-```
-
-What it does:
-
-1. Generates a synthetic, MVTec-AD-shaped dataset under `data/sample/widget/`
-2. Fits PatchCore (WideResNet50 backbone, ImageNet weights) in seconds
-3. Evaluates on the held-out test split and prints image AUROC
-
-Expected output:
+### What the pipeline does
 
 ```
-[smoke] device = cuda
-[smoke] fit done in 2.93s; bank size = torch.Size([1960, 1536])
-[smoke] image AUROC = 1.0000
-[smoke] PASS
+RTSP / mp4 ─▶ frame loop ─▶ detector ─▶ ByteTrack ─▶ analytics ─▶ annotated mp4 + per-frame JSON
+                                                          │
+                                                          ├─ Zone (count people inside a polygon)
+                                                          ├─ Line counter (entry / exit)
+                                                          └─ Dwell timer (per-track seconds in zone)
 ```
 
-If you see `[smoke] PASS`, everything is wired up correctly.
+### Closed-vocabulary (fast path)
+
+```cmd
+mvmm track video --input cctv\cam01_20260527.mp4 ^
+    --output-video outputs\cam01_track.mp4 ^
+    --output-json  outputs\cam01_track.json ^
+    --detector yolo --model yolo11s.pt --classes "person,forklift" ^
+    --score-threshold 0.30 --frame-rate 25
+```
+
+### Open-vocabulary (text-prompted detection)
+
+```cmd
+mvmm track video --input cctv\cam01.mp4 --detector grounding_dino ^
+    --classes "person wearing safety vest,forklift,pallet,box on the floor"
+```
+
+### Python API — building a richer pipeline
+
+```python
+import numpy as np
+from mvmm.tracking import ByteTrackTracker, TrackingPipeline, build_detector
+from mvmm.tracking.analytics import PolygonZone, LineCounter, DwellTimer
+
+detector = build_detector("yolo", model="yolo11s.pt", device="cuda")
+tracker  = ByteTrackTracker(frame_rate=25, track_activation_threshold=0.3)
+
+safe_zone  = PolygonZone(np.array([[100, 200], [500, 200], [500, 460], [100, 460]]), name="safe")
+entry_line = LineCounter(a=(0, 250), b=(640, 250), name="entry")
+dwell      = DwellTimer(zone=safe_zone)
+
+pipeline = TrackingPipeline(
+    detector=detector, tracker=tracker,
+    classes=["person", "forklift"], score_threshold=0.3,
+    zones=[safe_zone], line_counters=[entry_line], dwell_timers=[dwell],
+)
+stats = pipeline.process_video("cam01.mp4",
+                               output_video="outputs/cam01.mp4",
+                               output_json="outputs/cam01.json")
+print(f"{stats.n_unique_track_ids} unique IDs; entry={entry_line.in_count}")
+```
+
+### Optional: SAM2 video mask tracking
+
+```python
+from mvmm.tracking.sam2_video import SAM2VideoTracker
+seg = SAM2VideoTracker(checkpoint="weights/sam2_hiera_l.pt", device="cuda")
+seg.init_state("cam01.mp4")
+seg.add_box_prompts(frame_idx=0, boxes_xyxy=first_frame_boxes, obj_ids=[1, 2, 3])
+masks = seg.propagate()  # dict[frame_idx][obj_id] = HxW uint8 mask
+```
 
 ---
 
-## 6. Module guides
+## 7. Pillar 2 — Zero-shot / open-vocabulary perception
 
-### 6.1 Anomaly detection — `mvmm.anomaly`
+### Open-vocabulary detection on one image
 
-#### PatchCore (working baseline)
-
-```bash
-# 1. Download MVTec-AD (one-time, ~5 GB)
-python scripts/download_mvtec.py --dest data/mvtec_ad
-
-# 2. Fit a memory bank on a single category
-mvmm anomaly train \
-    --data-root data/mvtec_ad/bottle \
-    --output    checkpoints/patchcore_bottle.pkl
-
-# 3. Evaluate
-mvmm anomaly eval \
-    --data-root  data/mvtec_ad/bottle \
-    --checkpoint checkpoints/patchcore_bottle.pkl
+```cmd
+mvmm zeroshot detect ^
+    --image data\sample\widget\test\defect\000.png ^
+    --classes "person,forklift,pallet,defect on the surface" ^
+    --detector grounding_dino ^
+    --output outputs\zeroshot_detect.png
 ```
 
-Typical numbers on MVTec-AD `bottle` with WideResNet50 + 10% coreset:
-**image AUROC > 0.98, pixel AUROC > 0.97**.
+### Zero-shot image anomaly detection (no training data)
 
-#### Zero-shot with CLIP (no training)
-
-```bash
-mvmm anomaly zero-shot \
-    --image       data/sample/widget/test/defect/000.png \
-    --object-name "industrial widget"
-# → outputs/clip_score.png  (heatmap overlay)
+```cmd
+mvmm anomaly zero-shot ^
+    --image data\sample\widget\test\defect\000.png ^
+    --object-name "industrial widget" ^
+    --output outputs\clip_score.png
 ```
 
-This uses the WinCLIP-style multi-scale window scoring with handcrafted
-prompts. Replace `--object-name` with any noun phrase that describes
-your part ("automotive bracket", "lithium-ion cell can lid", etc.).
+Prompt engineering matters — see `scripts\demo_zero_shot_prompts.py`
+for a head-to-head comparison of generic vs domain-specific prompt sets:
 
-#### Rule + DL fusion (Python API)
+| Prompt set | normal | defect | gap |
+|---|---|---|---|
+| generic | 0.9265 | 0.9256 | ≈ 0 (bad) |
+| semiconductor | 0.3778 | 0.5387 | +0.16 (good) |
+| automotive | 0.8810 | 0.9031 | +0.02 |
+
+### Detect → segment in one call
 
 ```python
-from mvmm.anomaly.hybrid import RuleBasedScorer, fuse_rule_and_dl
-from mvmm.anomaly.patchcore import PatchCore
+from mvmm.tracking.detectors import GroundingDINODetector
+from mvmm.zeroshot import SAM2ImagePredictor, OpenVocabPipeline
 
-rule = RuleBasedScorer().score(image_rgb)              # (H, W) float
-dl   = patchcore.predict(image_tensor.unsqueeze(0))    # AnomalyResult
-fused = fuse_rule_and_dl(rule, dl, alpha=0.6)          # AnomalyResult
+det = GroundingDINODetector()
+seg = SAM2ImagePredictor(checkpoint="weights/sam2_hiera_l.pt")
+pipeline = OpenVocabPipeline(detector=det, segmenter=seg)
+
+result = pipeline(image_rgb, classes=["forklift", "pallet"])
+# result.detections.boxes, result.masks
 ```
-
-### 6.2 Dimensional metrology — `mvmm.metrology`
-
-#### One-shot measurement on a single image
-
-```bash
-mvmm metrology measure \
-    --image     data/your_part.png \
-    --seed-x    320 \
-    --seed-y    240 \
-    --mm-per-px 0.12         # set 0 to report pixels only
-```
-
-Output (JSON written to `outputs/measure.json`):
-
-```json
-{
-  "rect_width_px":   180.2,
-  "rect_height_px":  301.7,
-  "rect_width_mm":    21.62,
-  "rect_height_mm":   36.20,
-  "circle_radius_px": 165.4,
-  "circle_radius_mm": 19.85,
-  "line_length_px":  290.5,
-  "line_length_mm":   34.86
-}
-```
-
-The default segmenter is GrabCut (no GPU). To switch to SAM2:
-
-```python
-from mvmm.metrology.segmentation import build_segmenter
-seg = build_segmenter(backend="sam2",
-                      checkpoint="path/to/sam2_hiera_large.pt")
-mask = seg(image_rgb, points=[(cx, cy, 1)])
-```
-
-#### Camera calibration helper
-
-```python
-from mvmm.metrology.calibration import calibrate_with_chessboard
-
-intr, rms = calibrate_with_chessboard(
-    image_paths=glob("calib_*.png"),
-    pattern_size=(9, 6),
-    square_mm=25.0,
-)
-print(f"RMS reproj. error: {rms:.3f} px")
-intr.save_npz("data/intrinsics.npz")
-```
-
-### 6.3 6D pose & bin picking — `mvmm.pose`
-
-#### Run a single bin-pick frame end-to-end (classical baseline)
-
-```bash
-mvmm pose bin-pick \
-    --rgb            data/scene.png \
-    --depth          data/scene_depth.png \
-    --intrinsics-npz data/intrinsics.npz \
-    --seed-x         640 \
-    --seed-y         360
-```
-
-The classical pipeline uses GrabCut for segmentation, projects the
-masked depth into 3D, then runs the antipodal grasp sampler. Output
-(`outputs/binpick.json`) contains the best grasp's two contact points,
-opening width in mm, and a force-closure proxy score.
-
-#### Adding FoundationPose (model-aware refinement)
-
-1. Clone NVlabs/FoundationPose into `third_party/` and install per its README.
-2. Set `MVMM_FOUNDATIONPOSE_PATH` to the cloned repo's root.
-3. Use `mvmm.pose.foundation_pose.FoundationPoseEstimator` in your pipeline:
-
-```python
-from mvmm.pose.foundation_pose import FoundationPoseEstimator
-from mvmm.pose.pipeline import PosePipeline
-from mvmm.pose.grasp import antipodal_grasps
-from mvmm.metrology.segmentation import build_segmenter
-
-fp = FoundationPoseEstimator(
-    cad_mesh_path="data/cad/part.obj",
-    intrinsics_3x3=intr.K,
-)
-pipeline = PosePipeline(
-    segmenter=build_segmenter("sam2", checkpoint="..."),
-    pose_estimator=fp,
-    grasp_sampler=antipodal_grasps,
-)
-```
-
-### 6.4 Predictive maintenance — `mvmm.pdm`
-
-#### Train the multimodal model
-
-Expected table layout (`csv` or `parquet`):
-
-```
-timestamp, vib_x, vib_y, current, ..., health, image_path
-1700000000, 0.12, -0.04, 1.83, ..., 0, frames/000001.png
-1700000001, 0.13, -0.05, 1.85, ..., 0, frames/000002.png
-...
-```
-
-Train:
-
-```bash
-mvmm pdm train \
-    --table       data/motor.csv \
-    --sensor-cols "vib_x,vib_y,current" \
-    --target-col  health \
-    --seq-len     512 \
-    --epochs      5
-```
-
-The sensor branch is a small TimesNet stack; the image branch is a
-frozen `torchvision` ResNet (or any timm model — change in
-`PdMConfig.vision_backbone`). Late-fusion MLP produces classification
-logits or a scalar RUL.
 
 ---
 
-## 7. CLI reference
+## 8. Pillar 3 — 3D scene understanding
 
-The top-level command is `mvmm`. All subcommands print help with `--help`.
+### Monocular depth → PLY point cloud
+
+```cmd
+mvmm depth infer ^
+    --image    data\sample\widget\test\defect\000.png ^
+    --output   outputs\depth.png ^
+    --output-ply outputs\depth.ply
+```
 
 ```
-mvmm                              ─ overview
-├── info                          ─ environment / dependency check
+Depth saved outputs\depth.png  (min=2.129, max=4.145)
+PLY saved:  outputs\depth.ply  (65536 points)
+```
+
+### Programmatic depth + reconstruction
+
+```python
+import numpy as np
+from mvmm.three_d.depth import DepthAnythingV2
+from mvmm.three_d.reconstruction import back_project, save_ply
+
+depth = DepthAnythingV2(device="cuda")(image_rgb)
+h, w = depth.shape
+K = np.array([[800, 0, w / 2], [0, 800, h / 2], [0, 0, 1]])
+out = back_project(depth, K, rgb=image_rgb)
+save_ply("scene.ply", out["points"], out["colors"])
+```
+
+### 6D pose (CAD-based, requires FoundationPose install)
+
+```python
+from mvmm.three_d.pose.foundation_pose import FoundationPoseEstimator
+fp = FoundationPoseEstimator(cad_mesh_path="cad/part.obj",
+                              intrinsics_3x3=K)
+pose = fp.estimate(rgb=image_rgb, depth_mm=depth_mm, mask=part_mask)
+```
+
+### Gaussian Splatting (requires `pip install gsplat`)
+
+```python
+from mvmm.three_d.gaussian_splatting import GaussianSplattingTrainer
+trainer = GaussianSplattingTrainer(backend="gsplat")
+trainer.train(scene_dir="scenes/factory_floor", output_dir="outputs/gs", iterations=7000)
+```
+
+---
+
+## 9. Pillar 4 — PdM + Video Anomaly Detection
+
+### PdM — train + eval on synthetic motor data
+
+```cmd
+python scripts\make_pdm_sample_data.py
+mvmm pdm train --table data\sample\pdm\motor.csv ^
+    --sensor-cols "vib_x,vib_y,current" --target-col health ^
+    --seq-len 512 --stride 512 --epochs 5 --output checkpoints\pdm_motor.pt
+mvmm pdm eval --table data\sample\pdm\motor.csv ^
+    --sensor-cols "vib_x,vib_y,current" --target-col health ^
+    --checkpoint checkpoints\pdm_motor.pt --seq-len 512 --stride 512
+```
+
+Observed on the synthetic motor (5 epochs, 100 windows):
+
+```
+loss 0.66 → 0.32
+PdM eval  windows=100  accuracy=0.9600  AUROC=0.9984
+```
+
+### VAD — train a frame autoencoder, evaluate on a mixed test set
+
+```cmd
+python scripts\make_vad_sample_data.py
+mvmm vad train --train-root data\sample\vad\train\normal --epochs 15 ^
+    --output checkpoints\vad_ae.pt
+mvmm vad eval --test-root data\sample\vad\test ^
+    --labels data\sample\vad\labels.csv --checkpoint checkpoints\vad_ae.pt
+```
+
+Observed:
+
+```
+recon_loss 0.0215 → 0.00065 (after 15 epochs)
+VAD eval  frames=160  AUROC=0.7990
+  test_anomaly_00   mean=0.01706  max=0.04225
+  test_anomaly_01   mean=0.01706  max=0.04224
+  test_normal_00    mean=0.00067  max=0.00069
+  test_normal_01    mean=0.00067  max=0.00069
+```
+
+Normal clips reconstruct ~25× better than anomalous ones.
+
+### MemAE upgrade
+
+Swap `ConvAutoEncoder` for `MemAE` to harden the gap on harder datasets:
+
+```python
+from mvmm.vad.memae import MemAE, entropy_loss
+model = MemAE(in_channels=3, n_slots=2000)
+# loss = MSE(recon, x) + 0.0002 * entropy_loss(attention)
+```
+
+---
+
+## 10. One-shot inference dump
+
+```cmd
+python scripts\dump_all_results.py --inputs data\sample --out outputs\dump
+```
+
+What it does: for every image/video under `--inputs`, runs depth +
+zero-shot detection + AnomalyCLIP (for images) and tracking (for
+videos), writes everything under `outputs\dump\<timestamp>\` with a
+``summary.json`` recording which modules succeeded and how long they
+took.
+
+```
+outputs/dump/20260527_103454/
+├── images/
+│   ├── 000__depth.png
+│   ├── 000__zeroshot.png
+│   └── 000__clip.png
+├── videos/
+│   ├── sample__track.mp4
+│   └── sample__track.json
+└── summary.json
+```
+
+---
+
+## 11. Gradio demo
+
+```cmd
+python -m mvmm.serving.gradio_app
+# → http://localhost:7860
+```
+
+Three tabs:
+- **CCTV Tracking** — upload a clip, set classes, see the annotated mp4
+- **Zero-shot Detection** — upload an image, type text classes, pick GroundingDINO vs OWLv2
+- **Monocular Depth** — upload an image, get a colorized Depth Anything v2 map
+
+---
+
+## 12. CLI reference
+
+```
+mvmm
+├── info                              ─ environment / dep check
+├── track
+│   └── video                          ─ end-to-end CCTV tracking
+├── zeroshot
+│   └── detect                         ─ open-vocab detection on an image
+├── depth
+│   └── infer                          ─ monocular depth + optional PLY
+├── vad
+│   ├── train                          ─ frame-AE training on normal frames
+│   └── eval                           ─ AUROC + per-clip scores
 ├── anomaly
-│   ├── train                     ─ fit PatchCore on a category
-│   ├── eval                      ─ AUROC / PRO on test split
-│   └── zero-shot                 ─ AnomalyCLIP inference on one image
+│   ├── train / eval / zero-shot       ─ image AD (PatchCore / AnomalyCLIP)
 ├── metrology
-│   └── measure                   ─ segment + measure dimensions
+│   └── measure                        ─ segment + dimensions
 ├── pose
-│   └── bin-pick                  ─ classical bin-pick on RGB+depth
+│   └── bin-pick                       ─ classical bin-pick on RGB+D
 └── pdm
-    └── train                     ─ train TimesNet + Vision PdM model
+    ├── train / eval
 ```
+
+Every subcommand prints help with `--help`.
 
 ---
 
-## 8. Configuration system (Hydra)
-
-The CLI exposes flat flags for quick iteration; the scripts under
-`scripts/` use [Hydra](https://hydra.cc/) for reproducible experiments.
-
-```
-configs/
-├── defaults.yaml
-├── anomaly/
-│   ├── patchcore.yaml
-│   ├── efficient_ad.yaml
-│   └── anomaly_clip.yaml
-├── data/
-│   ├── mvtec_ad.yaml
-│   └── visa.yaml
-└── hardware/
-    ├── cuda.yaml
-    └── cpu.yaml
-```
-
-Example overrides:
-
-```bash
-python scripts/train_anomaly.py \
-    anomaly=patchcore \
-    anomaly.coreset_ratio=0.05 \
-    data=mvtec_ad data.category=cable \
-    hardware=cuda
-```
-
-Hydra writes a per-run output directory under `outputs/<date>/<time>/`
-with the resolved config + logs.
-
----
-
-## 9. Testing & continuous integration
+## 13. Testing & CI
 
 Local:
 
-```bash
+```cmd
 ruff check src tests scripts
 ruff format src tests scripts
-pytest -m "not slow and not gpu and not network"
-python scripts/smoke_test.py
+set PYTHONPATH=src && pytest -v
+python scripts\smoke_test.py
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the
-same set on Ubuntu, Python 3.10 and 3.11, CPU-only PyTorch. Every PR
-must be green before merging into `dev`.
-
-Test markers:
-- `slow`     — runs >5 s
-- `gpu`      — requires CUDA
-- `network`  — downloads from the internet
-
-The default `pytest` invocation skips all three.
+Current state: **29 tests passing** (CPU-only, no network), covering
+common utilities, image AD, metrology, pose, PdM, VAD, tracking
+analytics, 3D reconstruction. CI runs the same on Ubuntu, Python 3.10
+and 3.11.
 
 ---
 
-## 10. Branching & contribution workflow
+## 14. Branching & contribution workflow
 
 ```
-main      ←  always stable / releasable. No direct commits.
+main      ←  stable / releasable. No direct commits.
 └─ dev    ←  integration. All feature PRs target this.
    └─ feature/<topic>   ←  actual work
 ```
 
-Typical loop:
-
-```bash
-git checkout dev && git pull
-git checkout -b feature/dinov2-patchcore
-# code, commit
-ruff check src tests scripts && pytest
-git push -u origin feature/dinov2-patchcore
-gh pr create --base dev --title "feat(anomaly): DINOv2 backbone for PatchCore"
-# ... review + CI green ...
-# Merge feature → dev. Release time: PR dev → main.
+```cmd
+git checkout dev
+git pull
+git checkout -b feature/your-topic
+:: code, ruff, pytest
+git push -u origin feature/your-topic
+gh pr create --base dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for commit conventions and
-pre-commit hook setup.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit message conventions and pre-commit hooks.
 
 ---
 
-## 11. Domain → algorithm mapping
-
-A pragmatic cheat-sheet for picking a starting module given a real
-manufacturing task.
-
-| Your task | Start here | Upgrade path |
-|---|---|---|
-| Wafer-level pattern defect | `anomaly.PatchCore` (WideResNet50) | EfficientAD for real-time → AnomalyCLIP for new patterns |
-| Automotive surface scratch / dent | `anomaly.hybrid` (Canny + LBP + PatchCore) | Swap to DINOv2 / ConvNeXt-v2 backbones |
-| Diameter / length / flatness | `metrology.measure` + SAM2 | Stereo (`StereoSGBM`) or Depth Anything v2 |
-| Single-object bin pick | `pose.PosePipeline` + antipodal grasps | FoundationPose + SAM2 (SuperPose-style) |
-| Motor / pump health | `pdm.MultimodalPdMModel` (TimesNet + ResNet) | Add PatchTST, TimeLLM |
-
----
-
-## 12. Roadmap & references
+## 15. Roadmap & references
 
 - [docs/ROADMAP.md](docs/ROADMAP.md) — versioned milestone plan
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design principles &
-  how to add a new SOTA method
-- [docs/papers.md](docs/papers.md) — curated SOTA reference list with
-  module mappings (2022–2026)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design principles + how to add a new SOTA method
+- [docs/papers.md](docs/papers.md) — curated SOTA reference list with module mappings (2022–2026)
+
+Next planned milestones (see ROADMAP):
+- **v0.2** — Cross-camera ReID (Market-1501 + TransReID), DEVA / MASA tracker swap-ins
+- **v0.3** — AnomalyCLIP learnable prompts, GroundingDINO 1.5, Grounded-SAM-2
+- **v0.4** — FoundationPose container, 3DGS end-to-end notebook, MoGe / Marigold
+- **v0.5** — MemAE / MGFN VAD training on UCF-Crime, PatchTST + cross-attention for PdM
 
 ---
 
-## 13. Troubleshooting / FAQ
+## 16. Troubleshooting / FAQ
 
-**`ImportError: cannot import name 'WideResNet50_2_Weights' …`**
-Your torchvision is newer than 0.18 — the symbol is `Wide_ResNet50_2_Weights`.
-This repo already uses the underscore form; if you see this error in
-your own code, follow the same convention.
+**`$env:PYTHONPATH=...` says "syntax error" on Windows**
+You're in `cmd.exe`, not PowerShell. Use `set PYTHONPATH=src && ...`.
 
-**`KeyError: 'mask'` during DataLoader collate**
-The `MVTecADDataset` was returning samples without a `"mask"` key for
-"good" test images. Already fixed; if you see it, pull `dev`.
-
-**`UnicodeEncodeError: 'cp949' codec can't encode character ...`**
-Windows console using CP949 codec. Either set
-`PYTHONIOENCODING=utf-8` in your shell, or upgrade to the latest
-PowerShell (it defaults to UTF-8).
-
-**`mvmm anomaly zero-shot` is slow on CPU**
-Expected — `open_clip` ViT-B/16 is ~150 M params. Use `--device cpu`
-only for sanity; switch to a CUDA device for any real volume.
+**`mvmm track video` returns 0 detections**
+YOLO is trained on COCO — if your objects aren't in COCO classes,
+switch to `--detector grounding_dino` and supply text classes.
 
 **FAISS install fails on Windows**
-`faiss-gpu` is Linux-only. On Windows, `faiss-cpu` works fine for the
-PatchCore memory-bank sizes used here. The code auto-falls back to
-`torch.cdist` if FAISS is unavailable.
+`faiss-gpu` is Linux-only. PatchCore auto-falls back to `torch.cdist`
+when FAISS is unavailable.
 
-**Docker: `nvidia-container-cli: initialization error`**
-Ensure NVIDIA Container Toolkit is installed and Docker has been
-restarted after install. On WSL2, also enable GPU support in Docker
-Desktop → Settings → Resources → WSL Integration.
+**`ImportError: sam2 is not installed`**
+SAM2 must be installed from the upstream repo:
+`pip install "git+https://github.com/facebookresearch/sam2"`.
+Until then, the SAM2 wrappers raise a clear ImportError when called.
+
+**Tracking inference is slow**
+Drop to `yolov8n.pt` for the fastest baseline, or run with
+`--device cpu` and a smaller `--frame-rate` for quick iteration.
+
+**Depth Anything v2 download fails behind a proxy**
+Set `HF_ENDPOINT=https://hf-mirror.com` (or your enterprise mirror)
+before running the depth command.
 
 ---
 
-## 14. License
+## 17. License
 
 [MIT](LICENSE) © 2026 CVKim

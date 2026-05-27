@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from mvmm.metrology.measure import circle_fit, dimension_from_mask, line_fit
-from mvmm.metrology.segmentation import ClassicalSegmenter
+from mvmm.three_d.metrology.measure import circle_fit, dimension_from_mask, line_fit
+from mvmm.three_d.metrology.segmentation import ClassicalSegmenter
 
 
 def test_dimension_from_mask_rectangle():

@@ -22,8 +22,8 @@ sys.path.insert(0, str(ROOT / "src"))
 import numpy as np
 from PIL import Image
 
-from mvmm.anomaly.anomaly_clip import AnomalyCLIP
 from mvmm.common.transforms import build_eval_transform
+from mvmm.zeroshot.anomaly_clip import AnomalyCLIP
 
 PROMPT_SETS = {
     "generic": (
