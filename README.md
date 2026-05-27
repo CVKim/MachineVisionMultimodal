@@ -535,18 +535,55 @@ pose = fp.estimate(rgb=image_rgb, depth_mm=depth_mm, mask=part_mask)
 ### Multimodal PdM — 3 architectures compared
 
 ```cmd
+:: quick stdout-only comparison (8 epochs)
 python scripts\compare_pdm_models.py --epochs 8
+
+:: full run — checkpoints + predictions + 5 charts saved
+python scripts\run_pdm_full.py --epochs 12
 ```
 
 ![3-way PdM model comparison](docs/assets/pdm_compare_bars.png)
 
-Real numbers on the committed synthetic motor data (70/30 split):
+12-epoch numbers on the committed synthetic motor data (70/30 split):
 
 | Model | Accuracy | AUROC | Params | Notes |
 |---|---:|---:|---:|---|
-| TimesNet+ResNet (concat) | 0.967 | 0.996 | 403 K | late-fusion baseline |
-| **PatchTST (sensor-only)** | **0.967** | 0.996 | **103 K** | 4× fewer params, no image needed |
-| TimesNet+ResNet (cross-attn) | 0.933 | **1.000** | 519 K | cleanest ranking |
+| TimesNet+ResNet (concat) | **1.000** | **1.000** | 403 K | late-fusion baseline |
+| PatchTST (sensor-only) | 0.967 | 0.991 | **103 K** | 4× fewer params, no image needed |
+| TimesNet+ResNet (cross-attn) | **1.000** | **1.000** | 519 K | fastest convergence |
+
+The diagnostic plots produced by `run_pdm_full.py`:
+
+![Per-window predicted failure probability](docs/assets/pdm_timeline.png)
+
+*Per-window P(failed) vs ground truth — all three models ramp smoothly
+through the failure boundary, exactly the early-warning signal a real
+maintenance team wants.*
+
+![Sensor signals — healthy vs failed](docs/assets/pdm_signals.png)
+
+*Vibration X/Y + current waveforms at the start (healthy, blue) vs end
+(failed, red) of the synthetic dataset.*
+
+![Thermal-camera frames across the health gradient](docs/assets/pdm_thermal_frames.jpg)
+
+*The vision branch sees a growing red hotspot — the dataset generator
+scales it with the same ``health`` parameter that flips the label.*
+
+Full artifact list saved by the script:
+
+| Artifact | Path | Use |
+|---|---|---|
+| Predictions per model | `outputs/pdm_results/predictions_<model>.csv` | window_idx, true, pred, prob_failed |
+| Training loss curves | `outputs/pdm_results/loss_curves.png` | convergence comparison |
+| Sensor signal viz | `outputs/pdm_results/sensor_signals.png` | healthy vs failed waveforms |
+| Thermal-camera frames | `outputs/pdm_results/thermal_frames.png` | health gradient illustration |
+| Prediction timeline | `outputs/pdm_results/prediction_timeline.png` | smooth ramp through failure |
+| Confusion matrices | `outputs/pdm_results/confusion_matrices.png` | 3-up comparison |
+| Per-model checkpoints | `checkpoints/pdm_{concat,patchtst,crossattn}.pt` | re-load for inference |
+| Summary | `outputs/pdm_results/summary.json` | machine-readable metrics + config |
+
+See [docs/EXPERIMENTS.md §7b](docs/EXPERIMENTS.md) for the full write-up.
 
 ### Video Anomaly Detection (frame autoencoder + MemAE)
 
