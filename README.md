@@ -418,6 +418,41 @@ python scripts\demo_cctv_openvocab.py --video data\demo\cctv\people_walking.mp4
 | retail          |   42   | person(0.69), person(0.63), ...                  |
 ```
 
+### Activity recognition — *what* is each person doing?
+
+YOLOv8-pose + ByteTrack + rule-based motion classifier — labels each
+track frame-by-frame as `idle / walking / working / lifting` and
+accumulates time-in-state.
+
+```cmd
+python scripts\run_activity_recognition.py --video data\demo\cctv\store_aisle.mp4 --every-nth 2
+```
+
+![Store-aisle activity recognition](docs/assets/activity_store_aisle_frame.jpg)
+
+![Activity timeline — store_aisle](docs/assets/activity_store_aisle_timeline.png)
+
+Captured on the public clips (RTX 3080):
+
+| video               | frames | tracks | wall   | total time-in-state (person-seconds)                |
+|---------------------|------:|-------:|-------:|-----------------------------------------------------|
+| people_detection    |   596 |    8   | 13.7 s | walking 20.2, working 3.1, lifting 0.9, unknown 9.0 |
+| store_aisle         |  1961 |   26   | 57.5 s | **idle 160.3**, lifting 9.9, working 5.3, walking 0.8, unknown 47.8 |
+
+Outputs saved per video:
+
+| file | content |
+|---|---|
+| `outputs/activity/<stem>/<stem>__activity.mp4` | annotated video with skeleton + per-track state badge + bottom gantt strip |
+| `<stem>__states.csv` | `(track_id, timestamp_s, state)` per processed frame |
+| `<stem>__summary.json` | per-track and aggregated time-in-state |
+| `<stem>__timeline.png` | per-track gantt across full clip |
+| `<stem>__time_breakdown.png` | stacked-bar of total seconds per state |
+
+See [docs/EXPERIMENTS.md §11b](docs/EXPERIMENTS.md) for the full write-up
+and how to swap the rule classifier for a SOTA temporal model
+(VideoMAE / SlowFast).
+
 ---
 
 ## 8. Pillar 2 — Zero-shot / open-vocabulary perception

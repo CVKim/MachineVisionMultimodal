@@ -425,6 +425,115 @@ Take-aways:
 
 ---
 
+## 11b. Activity recognition — pose-based "what is each person doing?"
+
+`scripts/run_activity_recognition.py` adds a per-track behavior layer
+on top of tracking. Each frame the YOLOv8-pose detector emits 17 COCO
+keypoints per person; the built-in ByteTrack gives stable IDs across
+frames; an `ActivityClassifier` then computes motion features from a
+15-frame keypoint history and classifies every track into one of:
+
+| state    | rule (bbox-height-normalized)                       |
+|----------|------------------------------------------------------|
+| walking  | hip-center displacement > 0.35 × bbox_height         |
+| working  | wrist motion > 0.04 × bbox_height *and* hips stationary |
+| lifting  | wrist below hip + elbow below shoulder + wrist moving |
+| idle     | total keypoint motion < 0.012 × bbox_height          |
+| unknown  | falls through the rule cascade                       |
+
+A bottom gantt strip on the annotated MP4 shows the rolling state of
+every track over the last 20 seconds — at a glance you see who is
+working, who is walking, who is idle, and how long they've been in
+that state.
+
+### Captured numbers (RTX 3080)
+
+| video               | model           | frames | tracks | wall   | eff FPS |
+|---------------------|-----------------|------:|-------:|-------:|--------:|
+| people_detection    | yolov8n-pose.pt |   596  |    8   | 13.7 s |   43.5  |
+| store_aisle         | yolov8n-pose.pt |  1961  |   26   | 57.5 s |   34.1  |
+
+Aggregate time-in-state (person-seconds):
+
+| video            | idle  | walking | working | lifting | unknown |
+|------------------|------:|--------:|--------:|--------:|--------:|
+| people_detection |   0.0 |    20.2 |     3.1 |     0.9 |     9.0 |
+| store_aisle      | 160.3 |     0.8 |     5.3 |     9.9 |    47.8 |
+
+The numbers match the expected scene priors:
+
+* **people_detection.mp4** is a hallway — almost everyone is in transit
+  (walking dominant, no idle time).
+* **store_aisle.mp4** is a retail aisle — shoppers spend most of their
+  time standing (idle 160 s), with a small but real lifting signal
+  (9.9 s) when they pick items off the shelf.
+
+### Output artifacts (per video)
+
+```
+outputs/activity/<video_stem>/
+├── <stem>__activity.mp4         annotated video with skeleton + state badge + bottom timeline
+├── <stem>__states.csv           (track_id, timestamp_s, state) per processed frame
+├── <stem>__summary.json         per-track + total time-in-state, in machine-readable form
+├── <stem>__timeline.png         per-track gantt for the full clip
+└── <stem>__time_breakdown.png   stacked bar of total seconds per state
+```
+
+### Visualizations
+
+![Activity recognition — store_aisle mid-clip](assets/activity_store_aisle_frame.jpg)
+
+*Mid-clip frame from store_aisle. Each person's bounding box is
+colored by current state, the skeleton is drawn in the same color, and
+the badge shows the track ID + state.*
+
+![Per-track activity timeline — store_aisle](assets/activity_store_aisle_timeline.png)
+
+*Gantt-style timeline across all 26 tracks in store_aisle. Long gray
+bands = idle (people standing); narrow orange ticks = lifting events;
+green = working hand motion; blue = walking transitions.*
+
+![Time breakdown — store_aisle](assets/activity_store_aisle_breakdown.png)
+
+*Stacked-bar per track + aggregated person-seconds across the clip.*
+
+![Per-track activity timeline — people_detection](assets/activity_people_detection_timeline.png)
+
+*Same plot for the hallway clip. Almost wall-to-wall blue = walking,
+matching the scene prior.*
+
+### Reproducing
+
+```cmd
+:: 1) one-time: download the public CCTV clips
+D:\anaconda\envs\anomalydet\python.exe scripts\fetch_demo_assets.py --videos
+
+:: 2) hallway demo (~14 s on RTX 3080)
+D:\anaconda\envs\anomalydet\python.exe scripts\run_activity_recognition.py ^
+    --video data\demo\cctv\people_detection.mp4
+
+:: 3) store-aisle demo — process every 2nd frame to halve wall-clock
+::    on the 60-FPS source
+D:\anaconda\envs\anomalydet\python.exe scripts\run_activity_recognition.py ^
+    --video data\demo\cctv\store_aisle.mp4 --every-nth 2
+```
+
+### Where the SOTA video-clip classifiers (VideoMAE, SlowFast, X3D) fit
+
+The rule-based classifier is intentionally explainable + GPU-cheap so
+you can run it in real time on a single 3080 and trace every decision.
+For high-stakes deployments you would swap it for a SOTA temporal model:
+
+* Plug VideoMAE / SlowFast into `ActivityClassifier._classify` to
+  replace the rule cascade with deep features, keeping the rest of the
+  pipeline (tracking + history + smoothing + time accounting) intact.
+* The current heuristic is the strong-baseline "what does this person
+  look like they're doing right now?" signal that the deep model
+  should *beat* before you ship it — same logic as PatchCore for image
+  AD.
+
+---
+
 ## 12. Open-vocabulary detection on the same footage
 
 `scripts/demo_cctv_openvocab.py --video data/demo/cctv/people_walking.mp4`
