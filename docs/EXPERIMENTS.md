@@ -534,6 +534,115 @@ For high-stakes deployments you would swap it for a SOTA temporal model:
 
 ---
 
+## 11c. v0.7 — VideoMAE plug-in + Hazard layer + Productivity analytics
+
+### VideoMAE plug-in for ActivityClassifier
+
+```python
+from mvmm.tracking.pose_activity import ActivityClassifier
+from mvmm.tracking.action_dl import DeepActionClassifier
+
+dl = DeepActionClassifier(
+    model_id="MCG-NJU/videomae-base-finetuned-kinetics",
+    clip_len=16, every_n_frames=8,
+)
+classifier = ActivityClassifier(fps=25.0, dl_classifier=dl)
+# Same .update(...) signature, plus an optional frame_rgb=... argument
+# that the DL plug-in needs for cropping per-track crops.
+```
+
+CLI shortcut:
+
+```cmd
+python scripts\run_activity_recognition.py ^
+    --video data\demo\cctv\store_aisle.mp4 --every-nth 2 ^
+    --dl-action MCG-NJU/videomae-base-finetuned-kinetics ^
+    --dl-clip-len 16 --dl-every-n-frames 8
+```
+
+The Kinetics-400 → 5-state mapping is a curated substring table in
+[`mvmm.tracking.action_dl.KINETICS_TO_STATE_SUBSTRINGS`](../src/mvmm/tracking/action_dl.py)
+covering 30+ relevant verbs. Add domain-specific labels there without
+retraining anything.
+
+### Hazard detection layer
+
+`HazardDetector` composes three checks; every event is timestamped and
+deduplicated by track for ``cool_down_s`` seconds.
+
+| Check            | Backend                                | Output                          |
+|------------------|----------------------------------------|---------------------------------|
+| `zone_violation` | `mvmm.tracking.analytics.PolygonZone`  | per-track per-zone              |
+| `proximity`      | Foot-point Euclidean px distance       | per-pair                        |
+| `ppe_missing`    | `GroundingDINODetector` on person crop | per-track, throttled `N` frames |
+
+Captured run on store_aisle.mp4 with **proximity threshold 80 px**:
+
+```
+hazards: 28 events  by_type={'proximity': 28}
+```
+
+Annotated preview clip (compressed):
+
+![Hazard preview GIF](assets/store_aisle_hazard__activity_preview.gif)
+
+A representative frame with the red hazard border (zoom for the
+``!`` badge):
+
+![Hazard frame](assets/activity_hazard_store_aisle_frame.jpg)
+
+Full clip:
+[docs/videos/store_aisle_hazard__activity_preview.mp4](../docs/videos/store_aisle_hazard__activity_preview.mp4)
+
+### Productivity analytics (bucketed time)
+
+`scripts/plot_productivity.py` reads the per-frame state CSV and
+produces three artifacts per input:
+
+```
+outputs/activity/<stem>/
+├── <stem>__productivity_buckets.png   stacked bar of state mix per bucket
+├── <stem>__productivity_per_track.png bar of (working + lifting) / total
+└── <stem>__productivity_summary.csv   per-bucket CSV with productive_pct
+```
+
+Captured on store_aisle (`--bucket-seconds 5`):
+
+![Productivity buckets — store_aisle](assets/activity_store_aisle_productivity_buckets.png)
+
+![Per-track productivity — store_aisle](assets/activity_store_aisle_productivity_per_track.png)
+
+For hourly / shift aggregation set `--bucket-seconds 3600` (hourly) or
+`28800` (8-hour shift); the `productive_pct` column in the CSV is the
+% of observed time spent in `working + lifting`.
+
+`ActivityClassifier` also exposes two Python APIs for ad-hoc analysis:
+
+```python
+buckets = classifier.time_in_state_by_bucket(bucket_seconds=3600.0)
+# -> {track_id: [{"bucket_start_s": ..., "idle": s, "walking": s, ...}, ...]}
+
+productivity = classifier.productivity_per_track()
+# -> {track_id: 0.0-1.0 fraction in working+lifting}
+```
+
+### Real-data wrapper
+
+```cmd
+python scripts\run_my_cctv.py --video C:\path\to\my_factory.mp4 ^
+    --model yolov8s-pose.pt ^
+    --zone-json configs\zones\example.json ^
+    --proximity-px 80 ^
+    --bucket-seconds 60
+```
+
+Thin wrapper that chains `run_activity_recognition.py` and
+`plot_productivity.py` with sensible defaults for real industrial
+footage (yolov8s-pose at full FPS). Outputs land under
+`outputs/my_cctv/<video_stem>/`.
+
+---
+
 ## 12. Open-vocabulary detection on the same footage
 
 `scripts/demo_cctv_openvocab.py --video data/demo/cctv/people_walking.mp4`

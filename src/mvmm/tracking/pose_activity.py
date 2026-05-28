@@ -186,6 +186,7 @@ class ActivityClassifier:
         wrist_speed_ratio: float = 0.04,
         idle_total_ratio: float = 0.012,
         min_kp_conf: float = 0.35,
+        dl_classifier: Any | None = None,
     ):
         self.fps = float(fps)
         self.window_frames = int(window_frames)
@@ -194,24 +195,44 @@ class ActivityClassifier:
         self.wrist_speed_ratio = float(wrist_speed_ratio)
         self.idle_total_ratio = float(idle_total_ratio)
         self.min_kp_conf = float(min_kp_conf)
+        # Optional plug-in: anything exposing
+        #     update(track_id, frame_rgb, bbox) -> str | None
+        # When set, its output takes priority and the rule cascade only
+        # fires while the DL classifier's clip buffer is still warming up.
+        self.dl_classifier = dl_classifier
         self.histories: dict[int, _TrackHistory] = {}
 
     # -------------------------- core update -------------------------
-    def update(self, tracks: list[PoseTrack], timestamp: float) -> None:
-        seen: set[int] = set()
+    def update(
+        self,
+        tracks: list[PoseTrack],
+        timestamp: float,
+        frame_rgb: np.ndarray | None = None,
+    ) -> None:
+        """Step the classifier by one frame.
+
+        Args:
+            tracks:    pose tracks for this frame.
+            timestamp: seconds, used for time accounting.
+            frame_rgb: optional full RGB frame. Required when a
+                       ``dl_classifier`` is attached so it can crop
+                       per-track image regions.
+        """
         for t in tracks:
             if t.track_id < 0:
                 t.state = "unknown"
                 continue
             h = self.histories.setdefault(t.track_id, _TrackHistory(track_id=t.track_id))
             h.window.append((timestamp, t.keypoints.copy(), t.kp_conf.copy(), t.bbox.copy()))
-            raw = self._classify(h, t.bbox)
+
+            dl_state: str | None = None
+            if self.dl_classifier is not None and frame_rgb is not None:
+                dl_state = self.dl_classifier.update(t.track_id, frame_rgb, t.bbox)
+            raw = dl_state if dl_state is not None else self._classify(h, t.bbox)
+
             h.recent_states.append(raw)
             t.state = Counter(list(h.recent_states)[-self.smooth_frames :]).most_common(1)[0][0]
             h.state_log.append((timestamp, t.state))
-            seen.add(t.track_id)
-        # tracks that have disappeared this frame keep their last state but
-        # do not extend the time-in-state — handled by the time_in_state aggregator.
 
     # ------------------------ classification ------------------------
     def _classify(self, history: _TrackHistory, bbox: np.ndarray) -> str:
@@ -325,6 +346,75 @@ class ActivityClassifier:
             for s, secs in per_track.items():
                 totals[s] = totals.get(s, 0.0) + secs
         return totals
+
+    # ----------------- bucketed (per-minute / hourly / shift) -----------------
+    def time_in_state_by_bucket(
+        self,
+        bucket_seconds: float = 3600.0,
+        max_t: float | None = None,
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Per-track seconds-per-state, split into fixed-width time buckets.
+
+        Args:
+            bucket_seconds: bucket width — 60 = per-minute, 3600 = hourly,
+                            28800 = 8-hour shift.
+            max_t:          override the upper time bound. Defaults to
+                            the latest timestamp seen across all tracks.
+
+        Returns:
+            ``{track_id: [{"bucket_start_s": float, "bucket_end_s": float,
+                            "<state>": seconds, ...}, ...]}``
+        """
+        if max_t is None:
+            max_t = 0.0
+            for h in self.histories.values():
+                if h.state_log:
+                    max_t = max(max_t, h.state_log[-1][0])
+        bucket_seconds = float(max(bucket_seconds, 1e-3))
+        n_buckets = max(int(np.ceil(max_t / bucket_seconds)), 1) if max_t > 0 else 1
+
+        out: dict[int, list[dict[str, Any]]] = {}
+        for tid, h in self.histories.items():
+            buckets: list[dict[str, Any]] = [
+                {
+                    "bucket_start_s": b * bucket_seconds,
+                    "bucket_end_s": (b + 1) * bucket_seconds,
+                    **dict.fromkeys(self.STATES, 0.0),
+                }
+                for b in range(n_buckets)
+            ]
+            for i in range(1, len(h.state_log)):
+                t_prev, s_prev = h.state_log[i - 1]
+                t_cur, _ = h.state_log[i]
+                # Distribute [t_prev, t_cur] across whichever buckets it straddles.
+                t = float(t_prev)
+                end = float(t_cur)
+                while t < end:
+                    b_idx = min(int(t // bucket_seconds), n_buckets - 1)
+                    b_end = min((b_idx + 1) * bucket_seconds, end)
+                    buckets[b_idx][s_prev] = buckets[b_idx].get(s_prev, 0.0) + (b_end - t)
+                    t = b_end
+            out[tid] = buckets
+        return out
+
+    def productivity_per_track(
+        self, working_states: tuple[str, ...] = ("working", "lifting")
+    ) -> dict[int, float]:
+        """Fraction of time spent in ``working_states`` per track.
+
+        Quick "how productive was this person?" score — defaults to
+        ``(working + lifting) / total observed time``. Returns 0.0 for
+        tracks with no observed time.
+        """
+        out: dict[int, float] = {}
+        for tid, per_state in self.time_in_state().items():
+            total = sum(per_state.values())
+            if total <= 0:
+                out[tid] = 0.0
+                continue
+            num = sum(per_state.get(s, 0.0) for s in working_states)
+            out[tid] = num / total
+        return out
 
     # ------------------------- export -------------------------------
     def to_dict(self) -> dict[str, Any]:

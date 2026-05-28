@@ -467,6 +467,112 @@ See [docs/EXPERIMENTS.md §11b](docs/EXPERIMENTS.md) for the full write-up
 and how to swap the rule classifier for a SOTA temporal model
 (VideoMAE / SlowFast).
 
+### Activity recognition — SOTA deep-model plug-in (v0.7)
+
+`ActivityClassifier` now takes an optional `dl_classifier` argument.
+Pass any object exposing `update(track_id, frame_rgb, bbox) -> str | None`
+and it overrides the rule cascade. We ship a VideoMAE wrapper out of
+the box:
+
+```cmd
+python scripts\run_activity_recognition.py ^
+    --video data\demo\cctv\store_aisle.mp4 --every-nth 2 ^
+    --dl-action MCG-NJU/videomae-base-finetuned-kinetics ^
+    --dl-clip-len 16 --dl-every-n-frames 8
+```
+
+* Per-track 16-frame ring buffer of cropped patches → VideoMAE → top-1
+  Kinetics-400 label → mapped to `{idle, walking, working, lifting,
+  unknown}` via
+  [`KINETICS_TO_STATE_SUBSTRINGS`](src/mvmm/tracking/action_dl.py).
+* While the DL buffer is still warming up (first 16 frames per track)
+  the rule cascade keeps the pipeline producing states, so the gantt
+  strip is never empty.
+* First call downloads ~360 MB to the HuggingFace cache. Subsequent
+  runs are cached.
+
+### Hazard detection (v0.7)
+
+`mvmm.tracking.hazard.HazardDetector` adds a safety-event layer:
+
+| Hazard         | Trigger                                                                  |
+|----------------|--------------------------------------------------------------------------|
+| `zone_violation` | Foot of a track inside a user-defined `PolygonZone`                      |
+| `proximity`      | Two tracks within `--proximity-px` pixels                                |
+| `ppe_missing`    | GroundingDINO inside the person crop doesn't see all required PPE classes |
+
+```cmd
+:: factory-floor demo with restricted zone + proximity + PPE
+python scripts\run_activity_recognition.py ^
+    --video data\demo\cctv\store_aisle.mp4 --every-nth 2 ^
+    --zone-json configs\zones\example.json ^
+    --proximity-px 80 ^
+    --ppe-prompts "safety helmet,high-visibility vest"
+```
+
+Captured on `store_aisle.mp4` with proximity threshold 80 px (no zones,
+no PPE — keeps the run fast):
+
+```
+total time-in-state (person-seconds):
+  idle 160.3s   walking 0.8s   working 5.3s   lifting 9.9s
+hazards: 28 events  by_type={'proximity': 28}
+```
+
+![Store-aisle hazard demo](docs/assets/activity_hazard_store_aisle_frame.jpg)
+
+Per-event records land under `summary.json["hazards"]["events"]`; the
+annotated video shows a red/orange thick border + ``!`` badge on the
+flagged track for each event frame. The committed preview:
+
+![Hazard preview GIF](docs/assets/store_aisle_hazard__activity_preview.gif)
+
+### Productivity analytics — hourly/daily aggregation (v0.7)
+
+`scripts/plot_productivity.py` reads the per-frame state CSV that the
+main pipeline writes and produces:
+
+* `*__productivity_buckets.png`   — stacked bar of state mix per
+  5-second (or any) bucket. Pass `--bucket-seconds 3600` for hourly.
+* `*__productivity_per_track.png` — bar of
+  `(working + lifting) / total` per track id, with the absolute
+  observed seconds as labels.
+* `*__productivity_summary.csv`   — per-bucket CSV usable in Excel,
+  with a `productive_pct` column.
+
+```cmd
+python scripts\plot_productivity.py ^
+    --summary outputs\activity\store_aisle\store_aisle__summary.json ^
+    --bucket-seconds 5
+```
+
+![Store-aisle productivity buckets](docs/assets/activity_store_aisle_productivity_buckets.png)
+
+![Store-aisle per-track productivity](docs/assets/activity_store_aisle_productivity_per_track.png)
+
+For hourly / daily aggregation in production, pass
+`--bucket-seconds 3600` (per-hour) or `28800` (per 8-hour shift); the
+CSV column `productive_pct` is the % of observed time spent in
+`working + lifting`. The new
+`ActivityClassifier.time_in_state_by_bucket(bucket_seconds=...)` and
+`productivity_per_track()` APIs are also accessible from Python.
+
+### Run on your own CCTV footage
+
+```cmd
+python scripts\run_my_cctv.py --video C:\path\to\my_factory.mp4 ^
+    --model yolov8s-pose.pt ^
+    --zone-json configs\zones\example.json ^
+    --proximity-px 80 ^
+    --bucket-seconds 60
+```
+
+`run_my_cctv.py` is a thin wrapper around the activity pipeline +
+productivity charts with sensible defaults for real industrial
+footage. All output lands under `outputs/my_cctv/<video_stem>/`. Add
+`--dl-action MCG-NJU/videomae-base-finetuned-kinetics` to layer the
+VideoMAE deep classifier on top.
+
 ---
 
 ## 8. Pillar 2 — Zero-shot / open-vocabulary perception

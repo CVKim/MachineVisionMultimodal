@@ -17,6 +17,13 @@ Legend: ✅ done · 🟡 wrapper-only (needs external install) · ⬜ planned
 - ✅ Pose-based activity recognition (idle / walking / working / lifting)
       with per-track time accounting — `mvmm.tracking.pose_activity` +
       `scripts/run_activity_recognition.py`, see [EXPERIMENTS.md §11b](EXPERIMENTS.md)
+- ✅ Embedded MP4 + GIF previews in README (`docs/videos/`)
+- ✅ VideoMAE deep action classifier plug-in — `mvmm.tracking.action_dl`
+- ✅ Hazard detection layer (zone / proximity / PPE) —
+      `mvmm.tracking.hazard.HazardDetector`
+- ✅ Productivity analytics (bucketed time + per-track productivity) —
+      `scripts/plot_productivity.py`
+- ✅ Real-data wrapper — `scripts/run_my_cctv.py`
 - ⬜ DEVA segmentation tracking (needs DEVA install)
 - ⬜ MASA universal tracker (needs MASA install)
 - ⬜ Market-1501 full ReID benchmark (needs dataset download)

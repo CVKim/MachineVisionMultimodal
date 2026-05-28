@@ -72,10 +72,11 @@ def encode_mp4_preview(
         idx += 1
     cap.release()
     writer.release()
-    print(
-        f"  mp4  {dst.relative_to(ROOT)}  ({w}x{h}, {written} frames @ {out_fps:.0f} FPS, "
-        f"{dst.stat().st_size // 1024} KB)"
-    )
+    try:
+        rel = dst.resolve().relative_to(ROOT)
+    except ValueError:
+        rel = dst
+    print(f"  mp4  {rel}  ({w}x{h}, {written} frames @ {out_fps:.0f} FPS, {dst.stat().st_size // 1024} KB)")
 
 
 def encode_gif_preview(
@@ -123,10 +124,11 @@ def encode_gif_preview(
         loop=0,
         optimize=True,
     )
-    print(
-        f"  gif  {dst.relative_to(ROOT)}  ({len(frames)} frames @ {out_fps:.0f} FPS, "
-        f"{dst.stat().st_size // 1024} KB)"
-    )
+    try:
+        rel = dst.resolve().relative_to(ROOT)
+    except ValueError:
+        rel = dst
+    print(f"  gif  {rel}  ({len(frames)} frames @ {out_fps:.0f} FPS, {dst.stat().st_size // 1024} KB)")
 
 
 def main() -> None:
@@ -160,7 +162,11 @@ def main() -> None:
             print(f"[skip] {src} not present")
             continue
         stem = src.stem.replace("__activity", "")
-        print(f"\n[encode] {src.relative_to(ROOT)}  ({src.stat().st_size // 1024} KB)")
+        try:
+            rel_src = src.resolve().relative_to(ROOT)
+        except ValueError:
+            rel_src = src
+        print(f"\n[encode] {rel_src}  ({src.stat().st_size // 1024} KB)")
         encode_mp4_preview(
             src,
             args.video_out / f"{stem}__activity_preview.mp4",

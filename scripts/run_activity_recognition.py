@@ -148,6 +148,36 @@ def main() -> None:
         default=1,
         help="Process only every Nth frame (speed-up on long high-fps clips).",
     )
+    p.add_argument(
+        "--dl-action",
+        type=str,
+        default="",
+        help="Optional VideoMAE checkpoint to plug into ActivityClassifier "
+        "(e.g. MCG-NJU/videomae-base-finetuned-kinetics). Heavy — downloads ~360 MB.",
+    )
+    p.add_argument("--dl-clip-len", type=int, default=16)
+    p.add_argument("--dl-every-n-frames", type=int, default=8)
+    # Hazard detection options.
+    p.add_argument(
+        "--zone-json",
+        type=Path,
+        default=None,
+        help="JSON file with a list of {name, polygon: [[x,y], ...]} restricted zones.",
+    )
+    p.add_argument(
+        "--proximity-px",
+        type=float,
+        default=0.0,
+        help="Pixel-distance threshold for proximity hazards. 0 disables.",
+    )
+    p.add_argument(
+        "--ppe-prompts",
+        type=str,
+        default="",
+        help="Comma-separated PPE classes to require (e.g. 'safety helmet,high-visibility vest'). "
+        "Triggers GroundingDINO inside each person crop.",
+    )
+    p.add_argument("--ppe-every-n", type=int, default=30)
     args = p.parse_args()
 
     out_dir = args.out / args.video.stem
@@ -173,7 +203,53 @@ def main() -> None:
     )
 
     tracker = PoseTracker(model=args.model, device=args.device, conf=args.conf, tracker=args.tracker)
-    classifier = ActivityClassifier(fps=effective_fps, window_frames=args.window, smooth_frames=args.smooth)
+
+    dl_classifier = None
+    if args.dl_action:
+        from mvmm.tracking.action_dl import DeepActionClassifier
+
+        print(f"[activity] loading deep action classifier: {args.dl_action}")
+        dl_classifier = DeepActionClassifier(
+            model_id=args.dl_action,
+            device=args.device,
+            clip_len=args.dl_clip_len,
+            every_n_frames=args.dl_every_n_frames,
+        )
+
+    classifier = ActivityClassifier(
+        fps=effective_fps,
+        window_frames=args.window,
+        smooth_frames=args.smooth,
+        dl_classifier=dl_classifier,
+    )
+
+    hazard_detector = None
+    if args.zone_json or args.proximity_px > 0 or args.ppe_prompts:
+        from mvmm.tracking.analytics import PolygonZone
+        from mvmm.tracking.hazard import HazardDetector
+
+        zones: list[PolygonZone] = []
+        if args.zone_json:
+            zones_data = json.loads(args.zone_json.read_text(encoding="utf-8"))
+            for z in zones_data:
+                zones.append(PolygonZone(polygon=np.array(z["polygon"], dtype=np.float32), name=z["name"]))
+            print(f"[activity] loaded {len(zones)} restricted zones from {args.zone_json}")
+
+        ppe_detector = None
+        ppe_classes = [c.strip() for c in args.ppe_prompts.split(",") if c.strip()]
+        if ppe_classes:
+            from mvmm.tracking.detectors import GroundingDINODetector
+
+            print(f"[activity] PPE check: {ppe_classes}  (GroundingDINO every {args.ppe_every_n} frames)")
+            ppe_detector = GroundingDINODetector(device=args.device, box_threshold=0.25)
+
+        hazard_detector = HazardDetector(
+            restricted_zones=zones,
+            proximity_threshold_px=(args.proximity_px or None),
+            ppe_detector=ppe_detector,
+            ppe_prompts=ppe_classes,
+            ppe_every_n=args.ppe_every_n,
+        )
 
     frame_idx = 0
     written = 0
@@ -189,11 +265,27 @@ def main() -> None:
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         pose_tracks = tracker.update(rgb)
         timestamp = frame_idx / max(src_fps, 1.0)
-        classifier.update(pose_tracks, timestamp)
+        classifier.update(pose_tracks, timestamp, frame_rgb=rgb)
+
+        hazard_events: list = []
+        if hazard_detector is not None:
+            hazard_events = hazard_detector.step(pose_tracks, rgb, timestamp)
 
         annot = frame_bgr.copy()
+        # Render restricted zones first so skeletons draw on top.
+        if hazard_detector is not None and hazard_detector.zones:
+            for z in hazard_detector.zones:
+                pts = z.polygon.astype(np.int32).reshape(-1, 1, 2)
+                overlay = annot.copy()
+                cv2.fillPoly(overlay, [pts], (0, 0, 200))
+                annot = cv2.addWeighted(overlay, 0.18, annot, 0.82, 0)
+                cv2.polylines(annot, [pts], isClosed=True, color=(0, 0, 200), thickness=2)
         for t in pose_tracks:
             draw_pose_track(annot, t)
+        if hazard_events:
+            from mvmm.tracking.hazard import draw_hazards
+
+            draw_hazards(annot, hazard_events, pose_tracks)
         composed = draw_state_strip(
             annot, classifier, height=strip_h, seconds_window=20.0, timestamp=timestamp
         )
@@ -224,6 +316,11 @@ def main() -> None:
         "time_in_state_s_per_track": classifier.time_in_state(),
         "total_time_in_state_s": classifier.total_time_in_state(),
     }
+    if hazard_detector is not None:
+        summary["hazards"] = {
+            "summary": hazard_detector.summary(),
+            "events": [e.as_dict() for e in hazard_detector.all_events()],
+        }
     with (out_dir / f"{args.video.stem}__summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False, default=str)
 
@@ -237,6 +334,9 @@ def main() -> None:
     print("  total time-in-state (person-seconds):")
     for s, secs in classifier.total_time_in_state().items():
         print(f"    {s:<8s} {secs:>6.1f}s")
+    if hazard_detector is not None:
+        h_summary = hazard_detector.summary()
+        print(f"  hazards: {h_summary['n_events']} events  by_type={h_summary['by_type']}")
 
 
 if __name__ == "__main__":  # pragma: no cover
