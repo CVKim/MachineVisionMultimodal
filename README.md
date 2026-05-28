@@ -428,7 +428,21 @@ accumulates time-in-state.
 python scripts\run_activity_recognition.py --video data\demo\cctv\store_aisle.mp4 --every-nth 2
 ```
 
-![Store-aisle activity recognition](docs/assets/activity_store_aisle_frame.jpg)
+**Live previews (annotated output from the script above):**
+
+![Store-aisle activity preview](docs/assets/store_aisle__activity_preview.gif)
+&nbsp; ![People-detection activity preview](docs/assets/people_detection__activity_preview.gif)
+
+<sub>Skeleton color and badge encode the predicted state per track; the bottom strip is a 20-second rolling gantt of every track's recent states.</sub>
+
+**Inline MP4 players (render on github.com):**
+
+<video src="https://github.com/CVKim/MachineVisionMultimodal/raw/main/docs/videos/store_aisle__activity_preview.mp4" controls width="480" muted></video>
+<video src="https://github.com/CVKim/MachineVisionMultimodal/raw/main/docs/videos/people_detection__activity_preview.mp4" controls width="480" muted></video>
+
+Raw downloads (also reproducible by running the script): [store_aisle__activity_preview.mp4](docs/videos/store_aisle__activity_preview.mp4) · [people_detection__activity_preview.mp4](docs/videos/people_detection__activity_preview.mp4)
+
+![Store-aisle activity recognition — mid-clip frame](docs/assets/activity_store_aisle_frame.jpg)
 
 ![Activity timeline — store_aisle](docs/assets/activity_store_aisle_timeline.png)
 
